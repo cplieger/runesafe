@@ -1,6 +1,7 @@
 package runesafe_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode"
@@ -168,6 +169,62 @@ func FuzzCapBytes(f *testing.F) {
 			if n > 0 && len(in) > n && n-len(out) >= utf8.UTFMax {
 				t.Errorf("CapBytes(%q, %d) = %q discarded %d bytes below the cap, want < %d", in, n, out, n-len(out), utf8.UTFMax)
 			}
+		}
+	})
+}
+
+// FuzzUntrustedContract drives the provenance type with arbitrary strings
+// and asserts its full contract against the preset oracles: Raw round-trips
+// the exact input bytes, String/MarshalText/LogValue all equal Sanitize,
+// SingleLine equals SanitizeSingleLine, MarshalText never errors, a JSON
+// round-trip of a tagged field yields the Sanitize form (decode-raw,
+// encode-sanitized), and re-tagging an emitted form is a fixed point
+// (idempotence carries over from the presets).
+func FuzzUntrustedContract(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, in string) {
+		u := runesafe.Untrusted(in)
+		if u.Raw() != in {
+			t.Errorf("Raw() = %q, want exact input %q", u.Raw(), in)
+		}
+		want := runesafe.Sanitize(in)
+		if got := u.String(); got != want {
+			t.Errorf("String() = %q, want %q", got, want)
+		}
+		text, err := u.MarshalText()
+		if err != nil {
+			t.Errorf("MarshalText() error: %v", err)
+		}
+		if string(text) != want {
+			t.Errorf("MarshalText() = %q, want %q", string(text), want)
+		}
+		if got := u.LogValue().String(); got != want {
+			t.Errorf("LogValue() = %q, want %q", got, want)
+		}
+		if got, wantStrict := u.SingleLine(), runesafe.SanitizeSingleLine(in); got != wantStrict {
+			t.Errorf("SingleLine() = %q, want %q", got, wantStrict)
+		}
+		var wrapped struct {
+			V runesafe.Untrusted `json:"v"`
+		}
+		wrapped.V = u
+		blob, err := json.Marshal(wrapped)
+		if err != nil {
+			t.Fatalf("Marshal: %v", err)
+		}
+		var back struct {
+			V string `json:"v"`
+		}
+		if err := json.Unmarshal(blob, &back); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if back.V != want {
+			t.Errorf("JSON round-trip = %q, want Sanitize form %q", back.V, want)
+		}
+		if again := runesafe.Untrusted(u.String()).String(); again != u.String() {
+			t.Errorf("re-tagged String not a fixed point: %q -> %q", u.String(), again)
 		}
 	})
 }
