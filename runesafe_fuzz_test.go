@@ -95,13 +95,15 @@ func FuzzSanitizeSafeIdempotent(f *testing.F) {
 // iteration can never produce but a direct caller can) and asserts the
 // policy lattice: a bidi control is unsafe under both policies, keepCRLF
 // only ever shrinks the unsafe set, the two policies diverge on CR and LF
-// alone, and within the valid rune range IsBidiControl agrees with the
-// standard library's unicode.Bidi_Control table.
+// alone, IsUnsafeNonASCII is exactly the above-ASCII restriction of the
+// policy (so it sits inside both presets and never flags ASCII), and within
+// the valid rune range IsBidiControl agrees with the standard library's
+// unicode.Bidi_Control table.
 func FuzzIsUnsafePolicyConsistency(f *testing.F) {
 	for _, r := range []rune{
 		0, '\n', '\r', 0x1b, 0x1f, ' ', '~', 0x7f, 0x80, 0x9b, 0x9f, 0xa0,
-		'\u061c', '\u200e', '\u2027', '\u2028', '\u202a', '\u202e', '\u2066',
-		'\u2069', 'a', '葬', unicode.MaxRune, -1,
+		'\u061c', '\u200e', '\u2027', '\u2028', '\u2029', '\u202a', '\u202e',
+		'\u2066', '\u2069', 'a', '葬', unicode.MaxRune, -1,
 	} {
 		f.Add(r)
 	}
@@ -109,6 +111,12 @@ func FuzzIsUnsafePolicyConsistency(f *testing.F) {
 		keep, strict := runesafe.IsUnsafe(r, true), runesafe.IsUnsafe(r, false)
 		if runesafe.IsBidiControl(r) && (!keep || !strict) {
 			t.Errorf("IsBidiControl(%U) is true but IsUnsafe = (keepCRLF %v, strict %v), want unsafe under both", r, keep, strict)
+		}
+		if got, want := runesafe.IsUnsafeNonASCII(r), keep && r > unicode.MaxASCII; got != want {
+			t.Errorf("IsUnsafeNonASCII(%U) = %v, want IsUnsafe(r, true) && r > MaxASCII = %v", r, got, want)
+		}
+		if runesafe.IsUnsafeNonASCII(r) && !strict {
+			t.Errorf("IsUnsafeNonASCII(%U) is true but the strict policy says safe; the subset must sit inside both presets", r)
 		}
 		if keep && !strict {
 			t.Errorf("IsUnsafe(%U) unsafe with keepCRLF=true but safe with false; keepCRLF must only shrink the unsafe set", r)

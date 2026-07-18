@@ -49,3 +49,15 @@ func ExampleIsBidiControl() {
 	fmt.Println(runesafe.IsBidiControl('\u202e'), runesafe.IsBidiControl('a'))
 	// Output: true false
 }
+
+// ExampleIsUnsafeNonASCII classifies the runes a URL percent-escaper must
+// encode even though url.Parse accepts them raw: the C1 escape introducer
+// and the bidi override are flagged, while an ASCII control (the sink's own
+// escaping covers it) and a plain letter are not.
+func ExampleIsUnsafeNonASCII() {
+	fmt.Println(runesafe.IsUnsafeNonASCII('\u009b'), runesafe.IsUnsafeNonASCII('\u202e'))
+	fmt.Println(runesafe.IsUnsafeNonASCII('\x1b'), runesafe.IsUnsafeNonASCII('é'))
+	// Output:
+	// true true
+	// false false
+}

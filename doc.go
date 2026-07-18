@@ -28,7 +28,9 @@
 //     JSON but line terminators to JavaScript and many viewers, so they
 //     split records like a raw newline.
 //
-// IsUnsafe classifies one rune under an explicit CR/LF policy and
+// IsUnsafe classifies one rune under an explicit CR/LF policy,
+// IsUnsafeNonASCII exposes the above-ASCII subset (C1, bidi controls, the
+// separators) for escapers whose sink already covers ASCII, and
 // IsBidiControl exposes the Bidi_Control subset. Sanitize (CR/LF kept, for
 // JSON-encoded sinks) and SanitizeSingleLine (CR/LF replaced too, for
 // single-line sinks) apply the two policies to whole strings, replacing

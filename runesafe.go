@@ -2,6 +2,7 @@ package runesafe
 
 import (
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -38,6 +39,20 @@ func IsUnsafe(r rune, keepCRLF bool) bool {
 		return true
 	}
 	return false
+}
+
+// IsUnsafeNonASCII reports whether r is an unsafe rune above the ASCII
+// range: a C1 control (U+0080-U+009F), a Unicode bidi control
+// (IsBidiControl), or the U+2028/U+2029 line separators. It is the IsUnsafe
+// policy minus C0, DEL, and the CR/LF axis (all ASCII), for composed
+// escapers whose sink already covers ASCII: a URL percent-encoder escapes
+// C0, DEL, and whitespace itself, but url.Parse accepts these non-ASCII
+// runes raw, and a terminal or Markdown viewer must never receive them.
+// The CR/LF policy switch is moot above ASCII, so there is no keepCRLF
+// parameter: IsUnsafeNonASCII(r) equals IsUnsafe(r, keepCRLF) && r >
+// unicode.MaxASCII under either policy.
+func IsUnsafeNonASCII(r rune) bool {
+	return r > unicode.MaxASCII && IsUnsafe(r, true)
 }
 
 // Sanitize makes an untrusted string safe for slog/JSON sinks by replacing
