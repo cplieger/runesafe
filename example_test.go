@@ -1,6 +1,7 @@
 package runesafe_test
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/cplieger/runesafe"
@@ -60,4 +61,25 @@ func ExampleIsUnsafeNonASCII() {
 	// Output:
 	// true true
 	// false false
+}
+
+// ExampleUntrusted tags an upstream field at the decode boundary: the raw
+// bytes survive ingestion for matching (Raw), while fmt, errors, and JSON
+// emission all render the sanitized form automatically.
+func ExampleUntrusted() {
+	var ep struct {
+		Title runesafe.Untrusted `json:"title"`
+	}
+	_ = json.Unmarshal([]byte(`{"title":"Frieren\u202egpj.exe"}`), &ep)
+
+	fmt.Println(len(ep.Title.Raw()))             // raw bytes preserved for compute
+	fmt.Println(ep.Title)                        // fmt renders sanitized
+	fmt.Println(fmt.Errorf("bad: %s", ep.Title)) // errors carry sanitized text
+	out, _ := json.Marshal(ep)
+	fmt.Println(string(out)) // encoders emit sanitized
+	// Output:
+	// 17
+	// Frieren gpj.exe
+	// bad: Frieren gpj.exe
+	// {"title":"Frieren gpj.exe"}
 }

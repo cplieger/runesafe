@@ -28,6 +28,15 @@
 //     JSON but line terminators to JavaScript and many viewers, so they
 //     split records like a raw newline.
 //
+// The Untrusted string type makes the policy travel with the value: tag an
+// upstream field at its decode struct and every standard sink applies
+// Sanitize automatically — slog via LogValuer, fmt and error construction
+// via Stringer, encoders via TextMarshaler — while Raw preserves the exact
+// bytes for matching, dedupe keys, and composed escapers. Machine-read
+// persistence must store Raw (encoding fires the sanitizer), and
+// construction-time sanitization remains the boundary for text that must
+// be safe unconditionally through every future sink.
+//
 // IsUnsafe classifies one rune under an explicit CR/LF policy,
 // IsUnsafeNonASCII exposes the above-ASCII subset (C1, bidi controls, the
 // separators) for escapers whose sink already covers ASCII, and

@@ -98,6 +98,25 @@ for _, r := range u {
 
 `IsBidiControl` exposes just the Bidi_Control subset for policies scoped to reordering alone.
 
+### Tagging provenance: the `Untrusted` type
+
+Per-call sanitizing re-derives the same fact — this text is untrusted — at every emit site, and a forgotten wrap is invisible. `Untrusted` records the fact once, where it is actually known: the struct that decodes the upstream payload.
+
+```go
+type Episode struct {
+    Title runesafe.Untrusted `json:"title"`
+}
+```
+
+Decoding is untouched (a string-kinded named type unmarshals natively, raw bytes in). Emission fires the policy through the standard interfaces — slog resolves the value sanitized (`slog.LogValuer`), `fmt` renders it sanitized (`fmt.Stringer`, so `fmt.Errorf("upstream said %s", v)` is safe at construction, the one boundary that covers error values), and `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`). Compute paths keep the exact bytes via `Raw()`:
+
+```go
+slog.Warn("better release available", "title", ep.Title) // sanitized automatically
+if ep.Title.Raw() == onDisk.Title.Raw() { /* matching stays raw */ }
+```
+
+Two rules keep it honest. Structs persisted for the program's own re-reading store `Raw()` in plain `string` fields — `MarshalText` fires inside every `json.Marshal`, so a tagged field in a state file would round-trip sanitized, not raw. And a `string(v)` conversion silently drops the tag; use `Raw()` so intentional unwrapping stays greppable.
+
 ## API
 
 | Symbol | Contract |
@@ -108,6 +127,9 @@ for _, r := range u {
 | `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
 | `IsBidiControl(r rune) bool` | Exactly `unicode.Is(unicode.Bidi_Control, r)`, without the table lookup. |
+| `Untrusted` (string type) | Provenance tag for upstream text: decodes raw, emits `Sanitize`'d through `slog.LogValuer`, `fmt.Stringer`, and `encoding.TextMarshaler`. |
+| `Untrusted.Raw() string` | The exact bytes as received — matching, dedupe keys, caps, and composed escapers operate on this. |
+| `Untrusted.SingleLine() string` | The strict `SanitizeSingleLine` form, for hand-built single-line sinks. |
 
 ## Origin
 
@@ -115,7 +137,8 @@ Extracted from [seadex-scout](https://github.com/cplieger/seadex-scout)'s `inter
 
 ## Adoption guidance
 
-- **Sanitize at the emit boundary, not at parse time.** Keep the raw value for matching, dedupe keys, and comparisons; sanitize the copy that leaves the process for human eyes.
+- **Sanitize at the emit boundary, not at parse time.** Keep the raw value for matching, dedupe keys, and comparisons; sanitize the copy that leaves the process for human eyes. Tagging a field `Untrusted` implements exactly this split with no per-site calls: raw in, sanitized out at every standard sink.
+- **Machine-read persistence stores `Raw()`.** A tagged field inside a struct written to a state file round-trips sanitized (`MarshalText` fires in `json.Marshal`); state structs keep plain `string` fields populated from `Raw()`. Construction-time sanitization also remains the right boundary for text that must be safe unconditionally through every future sink, like a captured error body.
 - **One policy per app.** Route every untrusted attribute through `Sanitize` / `SanitizeSingleLine` (or one app-local wrapper around `IsUnsafe`) so two sinks cannot disagree about what is dangerous.
 - **Context-aware sinks still need their own escaping.** A Markdown table cell, a link URL, or an HTML page has injection vectors this rune policy does not address (pipes, brackets, angle brackets); apply the sink's escaper on top.
 - **Choose the preset per sink, not globally.** JSON sinks keep CR/LF (the encoder escapes them); single-line sinks must not.
