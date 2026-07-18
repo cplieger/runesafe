@@ -192,14 +192,16 @@ func TestIsBidiControl(t *testing.T) {
 	}
 }
 
-// TestClassifierUnicodeConformance sweeps every valid rune and checks both
+// TestClassifierUnicodeConformance sweeps every valid rune and checks the
 // classifiers against the standard library's Unicode tables as an
 // independent oracle: IsBidiControl must equal unicode.Is(Bidi_Control, r)
-// exactly (the doc comment's claim), and IsUnsafe must equal the documented
+// exactly (the doc comment's claim), IsUnsafe must equal the documented
 // union — Cc controls (unicode.IsControl covers C0, DEL, and C1 exactly),
 // Bidi_Control, and the U+2028/U+2029 separators — with the two policies
-// diverging on CR/LF alone. This is the drift guard against a future
-// hand-edit of the hardcoded ranges.
+// diverging on CR/LF alone, and IsUnsafeNonASCII must equal both the
+// above-ASCII restriction of that union and the literal C1|bidi|separator
+// enumeration a percent-escaper composes. This is the drift guard against a
+// future hand-edit of the hardcoded ranges.
 func TestClassifierUnicodeConformance(t *testing.T) {
 	for r := rune(0); r <= unicode.MaxRune; r++ {
 		bidi := unicode.Is(unicode.Bidi_Control, r)
@@ -213,6 +215,37 @@ func TestClassifierUnicodeConformance(t *testing.T) {
 		unsafeKeep := unsafeStrict && r != '\n' && r != '\r'
 		if got := runesafe.IsUnsafe(r, true); got != unsafeKeep {
 			t.Fatalf("IsUnsafe(%U, true) = %v, oracle says %v", r, got, unsafeKeep)
+		}
+		nonASCII := unsafeStrict && r > unicode.MaxASCII
+		if got := runesafe.IsUnsafeNonASCII(r); got != nonASCII {
+			t.Fatalf("IsUnsafeNonASCII(%U) = %v, oracle says %v", r, got, nonASCII)
+		}
+		enumerated := (r >= 0x80 && r <= 0x9f) || bidi || r == '\u2028' || r == '\u2029'
+		if got := runesafe.IsUnsafeNonASCII(r); got != enumerated {
+			t.Fatalf("IsUnsafeNonASCII(%U) = %v, C1|bidi|separator enumeration says %v", r, got, enumerated)
+		}
+	}
+}
+
+// TestIsUnsafeNonASCII pins the above-ASCII subset predicate: C1 controls,
+// the Bidi_Control set, and the U+2028/U+2029 separators are flagged, while
+// every ASCII rune — including the C0 controls, CR/LF, and DEL that IsUnsafe
+// classifies — and safe non-ASCII neighbors stay false.
+func TestIsUnsafeNonASCII(t *testing.T) {
+	unsafe := []rune{
+		'\u0080', '\u009b', '\u009d', '\u009f',
+		'\u061c', '\u200e', '\u202e', '\u2066', '\u2069',
+		'\u2028', '\u2029',
+	}
+	for _, r := range unsafe {
+		if !runesafe.IsUnsafeNonASCII(r) {
+			t.Errorf("IsUnsafeNonASCII(%U) = false, want true", r)
+		}
+	}
+	safe := []rune{0x00, '\x1b', '\t', '\n', '\r', 0x7f, 'a', '~', '\u00a0', '\u2027', '\u206a', 'é', '葬'}
+	for _, r := range safe {
+		if runesafe.IsUnsafeNonASCII(r) {
+			t.Errorf("IsUnsafeNonASCII(%U) = true, want false", r)
 		}
 	}
 }

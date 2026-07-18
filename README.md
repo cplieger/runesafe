@@ -81,7 +81,22 @@ id = strings.Map(func(r rune) rune {
 }, id)
 ```
 
-`IsBidiControl` exposes the Bidi_Control subset for context-aware escapers that percent-encode rather than replace (for example a Markdown link-URL escaper that must keep the URL usable).
+For context-aware escapers that percent-encode rather than replace (for example a Markdown link-URL escaper that must keep the URL usable), `IsUnsafeNonASCII` classifies the above-ASCII subset of the policy — C1 controls, the Bidi_Control set, U+2028/U+2029 — since a URL encoder already covers ASCII controls and whitespace itself:
+
+```go
+// Percent-encode the policy runes url.Parse accepts but a viewer must never see raw.
+for _, r := range u {
+    if runesafe.IsUnsafeNonASCII(r) {
+        for _, b := range []byte(string(r)) {
+            fmt.Fprintf(&out, "%%%02X", b)
+        }
+        continue
+    }
+    out.WriteRune(r)
+}
+```
+
+`IsBidiControl` exposes just the Bidi_Control subset for policies scoped to reordering alone.
 
 ## API
 
@@ -91,6 +106,7 @@ id = strings.Map(func(r rune) rune {
 | `SanitizeSingleLine(s string) string` | The strict preset (keepCRLF=false): everything `Sanitize` replaces, plus CR and LF. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
 | `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
+| `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
 | `IsBidiControl(r rune) bool` | Exactly `unicode.Is(unicode.Bidi_Control, r)`, without the table lookup. |
 
 ## Origin
