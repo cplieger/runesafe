@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe.svg)](https://pkg.go.dev/github.com/cplieger/runesafe)
 [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod)
 [![Test coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/coverage.json)](https://github.com/cplieger/runesafe/actions/workflows/coverage.yml)
-[![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/mutation.json)](https://github.com/cplieger/runesafe/issues?q=label%3Agremlins-tracker)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13657/badge)](https://www.bestpractices.dev/projects/13657)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cplieger/runesafe/badge)](https://scorecard.dev/viewer/?uri=github.com/cplieger/runesafe)
 
 > One rune-safety policy for untrusted upstream text headed to slog, JSON, or rendered output
