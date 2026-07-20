@@ -1,6 +1,10 @@
 package runesafe
 
-import "log/slog"
+import (
+	"encoding"
+	"fmt"
+	"log/slog"
+)
 
 // Untrusted marks a string as untrusted upstream text at the moment it
 // enters the program — an API response field, an upstream error message, a
@@ -26,9 +30,16 @@ import "log/slog"
 //   - encoders: MarshalText implements encoding.TextMarshaler, so
 //     encoding/json and any TextMarshaler-aware encoder emit the
 //     Sanitize'd form, however deeply the value nests in a document.
+//     Map KEYS are the one exception: encoding/json uses a string-kinded
+//     key's bytes directly, never calling MarshalText, so a
+//     map[Untrusted]V key emits raw — key marshaled documents by
+//     u.String().
 //
 // Raw returns the exact bytes for the paths that must not be transformed:
-// matching, dedupe keys, byte caps, context-aware escapers. A plain
+// matching, dedupe keys, context-aware escapers, and byte caps on the raw
+// value itself (a cap bounding the EMITTED form applies after sanitizing:
+// CapBytes(v.String(), n), never Untrusted(CapBytes(v.Raw(), n)), because
+// sanitizing can grow invalid bytes into the 3-byte U+FFFD). A plain
 // string(v) conversion yields the same bytes but silently drops the tag;
 // prefer Raw so intentional unwrapping stays greppable.
 //
@@ -52,10 +63,17 @@ import "log/slog"
 // encoder escapes nothing, use SingleLine explicitly.
 type Untrusted string
 
+// Compile-time proof of the three sink interfaces the type doc promises.
+var (
+	_ slog.LogValuer         = Untrusted("")
+	_ fmt.Stringer           = Untrusted("")
+	_ encoding.TextMarshaler = Untrusted("")
+)
+
 // LogValue implements slog.LogValuer: a tagged attr value resolves to its
 // Sanitize'd form in every handler before encoding.
 func (u Untrusted) LogValue() slog.Value {
-	return slog.StringValue(Sanitize(string(u)))
+	return slog.StringValue(u.String())
 }
 
 // String implements fmt.Stringer: %s, %v, %q, and fmt.Errorf render the
@@ -66,11 +84,14 @@ func (u Untrusted) String() string {
 
 // MarshalText implements encoding.TextMarshaler: encoding/json and any
 // TextMarshaler-aware encoder emit the Sanitize'd form at any nesting
-// depth. Decoding is deliberately untouched (no UnmarshalText), so raw
-// bytes survive ingestion; see the type comment for the machine-read
-// persistence rule this asymmetry imposes.
+// depth — except as a map key: encoding/json resolves a string-kinded
+// map key directly from its bytes and never calls MarshalText, so a
+// map[Untrusted]V key marshals RAW. Key a marshaled document by
+// u.String() instead. Decoding is deliberately untouched (no
+// UnmarshalText), so raw bytes survive ingestion; see the type comment
+// for the machine-read persistence rule this asymmetry imposes.
 func (u Untrusted) MarshalText() ([]byte, error) {
-	return []byte(Sanitize(string(u))), nil
+	return []byte(u.String()), nil
 }
 
 // SingleLine returns the SanitizeSingleLine'd form, for hand-built
@@ -80,8 +101,12 @@ func (u Untrusted) SingleLine() string {
 }
 
 // Raw returns the exact bytes as received, for matching, dedupe keys, byte
-// caps, and context-aware escapers. Prefer Raw over a string conversion so
-// intentional unwrapping stays greppable.
+// caps, and context-aware escapers. A byte cap meant to bound an EMITTED
+// form belongs on the sanitized string — CapBytes(u.String(), n) — because
+// sanitizing can grow the raw bytes (each invalid byte becomes the
+// three-byte U+FFFD), so a cap applied to Raw does not survive emission.
+// Prefer Raw over a string conversion so intentional unwrapping stays
+// greppable.
 func (u Untrusted) Raw() string {
 	return string(u)
 }

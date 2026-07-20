@@ -108,7 +108,7 @@ type Episode struct {
 }
 ```
 
-Decoding is untouched (a string-kinded named type unmarshals natively, raw bytes in). Emission fires the policy through the standard interfaces — slog resolves the value sanitized (`slog.LogValuer`), `fmt` renders it sanitized (`fmt.Stringer`, so `fmt.Errorf("upstream said %s", v)` is safe at construction, the one boundary that covers error values), and `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`). Compute paths keep the exact bytes via `Raw()`:
+Decoding is untouched (a string-kinded named type unmarshals natively, raw bytes in). Emission fires the policy through the standard interfaces — slog resolves the value sanitized (`slog.LogValuer`), `fmt` renders it sanitized (`fmt.Stringer`, so `fmt.Errorf("upstream said %s", v)` is safe at construction, the one boundary that covers error values), and `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`; map keys are the exception -- `encoding/json` reads a string-kinded key's bytes directly without calling `MarshalText`, so key marshaled documents by `v.String()`, never by the tagged value). Compute paths keep the exact bytes via `Raw()`:
 
 ```go
 slog.Warn("better release available", "title", ep.Title) // sanitized automatically
@@ -128,7 +128,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
 | `IsBidiControl(r rune) bool` | Exactly `unicode.Is(unicode.Bidi_Control, r)`, without the table lookup. |
 | `Untrusted` (string type) | Provenance tag for upstream text: decodes raw, emits `Sanitize`'d through `slog.LogValuer`, `fmt.Stringer`, and `encoding.TextMarshaler`. |
-| `Untrusted.Raw() string` | The exact bytes as received — matching, dedupe keys, caps, and composed escapers operate on this. |
+| `Untrusted.Raw() string` | The exact bytes as received — matching, dedupe keys, compute-side caps, and composed escapers operate on this. An emit-bound byte cap belongs on the sanitized form: `CapBytes(v.String(), n)`. |
 | `Untrusted.SingleLine() string` | The strict `SanitizeSingleLine` form, for hand-built single-line sinks. |
 
 ## Origin
