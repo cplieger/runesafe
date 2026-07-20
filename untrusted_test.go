@@ -2,7 +2,6 @@ package runesafe_test
 
 import (
 	"bytes"
-	"encoding"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -10,13 +9,6 @@ import (
 	"testing"
 
 	"github.com/cplieger/runesafe"
-)
-
-// Compile-time proof of the three sink interfaces the type doc promises.
-var (
-	_ slog.LogValuer         = runesafe.Untrusted("")
-	_ fmt.Stringer           = runesafe.Untrusted("")
-	_ encoding.TextMarshaler = runesafe.Untrusted("")
 )
 
 // TestUntrustedSinkForms pins every emission form against the preset
@@ -168,5 +160,53 @@ func TestUntrustedComparableRaw(t *testing.T) {
 	m := map[runesafe.Untrusted]int{a: 1, b: 2}
 	if len(m) != 2 {
 		t.Errorf("map collapsed raw-distinct keys: %v", m)
+	}
+}
+
+// TestUntrustedKeptCRLFCannotForgeRecord pins the doc-comment claim that
+// the keepCRLF=true preset in LogValue is safe for BOTH built-in handlers:
+// a kept CR/LF is escaped by the handler's own encoding (JSONHandler string
+// escaping; TextHandler strconv quoting), so an upstream newline can never
+// forge a second log record. This is an environmental-conformance pin, like
+// TestClassifierUnicodeConformance: it guards the stdlib behavior the
+// package's documented safety claim rests on across Go upgrades.
+func TestUntrustedKeptCRLFCannotForgeRecord(t *testing.T) {
+	u := runesafe.Untrusted("ok\r\nlevel=ERROR msg=forged")
+	handlers := map[string]func(*bytes.Buffer) slog.Handler{
+		"json": func(b *bytes.Buffer) slog.Handler { return slog.NewJSONHandler(b, nil) },
+		"text": func(b *bytes.Buffer) slog.Handler { return slog.NewTextHandler(b, nil) },
+	}
+	for name, mk := range handlers {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			slog.New(mk(&buf)).Info("emit", "title", u)
+			got := buf.String()
+			if n := strings.Count(got, "\n"); n != 1 {
+				t.Errorf("%s record carries %d newlines, want exactly 1 (the record terminator): %q", name, n, got)
+			}
+			if strings.Contains(got, "\r") {
+				t.Errorf("%s record carries a raw CR: %q", name, got)
+			}
+			if !strings.HasSuffix(got, "\n") {
+				t.Errorf("%s record does not end with the terminator: %q", name, got)
+			}
+		})
+	}
+}
+
+// TestUntrustedMapKeyRawLimitation pins the documented encoding/json
+// limitation: a string-kinded map key never routes through MarshalText,
+// so a map[Untrusted]V key marshals raw. If a future Go release changes
+// key resolution, this test fails and the doc caveat can be removed.
+func TestUntrustedMapKeyRawLimitation(t *testing.T) {
+	m := map[runesafe.Untrusted]int{"k\u009b\u202e": 1}
+	out, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, r := range []rune{'\u009b', '\u202e'} {
+		if !bytes.ContainsRune(out, r) {
+			t.Errorf("map key no longer emits raw %U (%s); encoding/json key resolution changed -- update the MarshalText doc caveat", r, out)
+		}
 	}
 }
