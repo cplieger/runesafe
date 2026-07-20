@@ -32,7 +32,7 @@ import (
 //     Sanitize'd form, however deeply the value nests in a document.
 //     Map KEYS are the one exception: encoding/json uses a string-kinded
 //     key's bytes directly, never calling MarshalText, so a
-//     map[Untrusted]V key emits raw -- key marshaled documents by
+//     map[Untrusted]V key emits raw — key marshaled documents by
 //     u.String().
 //
 // Raw returns the exact bytes for the paths that must not be transformed:
@@ -84,13 +84,12 @@ func (u Untrusted) String() string {
 
 // MarshalText implements encoding.TextMarshaler: encoding/json and any
 // TextMarshaler-aware encoder emit the Sanitize'd form at any nesting
-// depth -- except as a map key: encoding/json resolves a string-kinded
+// depth — except as a map key: encoding/json resolves a string-kinded
 // map key directly from its bytes and never calls MarshalText, so a
 // map[Untrusted]V key marshals RAW. Key a marshaled document by
 // u.String() instead. Decoding is deliberately untouched (no
-// UnmarshalText), so raw
-// bytes survive ingestion; see the type comment for the machine-read
-// persistence rule this asymmetry imposes.
+// UnmarshalText), so raw bytes survive ingestion; see the type comment
+// for the machine-read persistence rule this asymmetry imposes.
 func (u Untrusted) MarshalText() ([]byte, error) {
 	return []byte(u.String()), nil
 }
@@ -103,7 +102,7 @@ func (u Untrusted) SingleLine() string {
 
 // Raw returns the exact bytes as received, for matching, dedupe keys, byte
 // caps, and context-aware escapers. A byte cap meant to bound an EMITTED
-// form belongs on the sanitized string -- CapBytes(u.String(), n) -- because
+// form belongs on the sanitized string — CapBytes(u.String(), n) — because
 // sanitizing can grow the raw bytes (each invalid byte becomes the
 // three-byte U+FFFD), so a cap applied to Raw does not survive emission.
 // Prefer Raw over a string conversion so intentional unwrapping stays
