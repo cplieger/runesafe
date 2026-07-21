@@ -57,6 +57,13 @@ Sanitizing can grow a string (each invalid UTF-8 byte becomes the three-byte U+F
 body := runesafe.CapBytes(runesafe.Sanitize(raw), maxBodyBytes)
 ```
 
+For the common log-attribute case — single-line, capped, visibly marked — `SanitizeSingleLineBounded` packages the composition: `SanitizeSingleLine`, then `CapBytes` on the sanitized form, then `"..."` appended **outside** the cap. `n` budgets the retained body, so a truncated result is at most n+3 bytes; a within-cap result comes back byte-identical, with no marker. Truncated output always ends in the marker, but the converse does not hold (input may itself end in `...`); a caller that must know whether truncation occurred composes the primitives itself. A non-positive `n` yields `"..."` alone for non-empty input, and `""` stays `""`:
+
+```go
+slog.Warn("upstream rejected request",
+    "reason", runesafe.SanitizeSingleLineBounded(upstreamErr.Error(), 200))
+```
+
 ### Rune classification
 
 `IsUnsafe` exposes the policy rune-by-rune, with an explicit CR/LF switch:
@@ -108,7 +115,7 @@ type Episode struct {
 }
 ```
 
-Decoding is untouched (a string-kinded named type unmarshals natively, raw bytes in). Emission fires the policy through the standard interfaces — slog resolves the value sanitized (`slog.LogValuer`), `fmt` renders it sanitized (`fmt.Stringer`, so `fmt.Errorf("upstream said %s", v)` is safe at construction, the one boundary that covers error values), and `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`; map keys are the exception -- `encoding/json` reads a string-kinded key's bytes directly without calling `MarshalText`, so key marshaled documents by `v.String()`, never by the tagged value). Compute paths keep the exact bytes via `Raw()`:
+Decoding is untouched (a string-kinded named type unmarshals natively, raw bytes in). Emission fires the policy through the standard interfaces — slog resolves the value sanitized (`slog.LogValuer`), `fmt` renders it sanitized (`fmt.Stringer`, so `fmt.Errorf("upstream said %s", v)` carries no escape introducers from construction on, the one boundary that covers error values; the form keeps CR/LF, so route such an error's text through `SingleLine()` if it is ever bound for a hand-built sink that escapes nothing), and `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`; map keys are the exception -- `encoding/json` reads a string-kinded key's bytes directly without calling `MarshalText`, so key marshaled documents by `v.String()`, never by the tagged value). Compute paths keep the exact bytes via `Raw()`:
 
 ```go
 slog.Warn("better release available", "title", ep.Title) // sanitized automatically
@@ -123,6 +130,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | --- | --- |
 | `Sanitize(s string) string` | Replaces each unsafe rune (keepCRLF=true policy) with a space. Valid UTF-8 out, rune count preserved, idempotent. |
 | `SanitizeSingleLine(s string) string` | The strict preset (keepCRLF=false): everything `Sanitize` replaces, plus CR and LF. |
+| `SanitizeSingleLineBounded(s string, n int) string` | `SanitizeSingleLine`, then a rune-boundary cap of the sanitized form at n bytes with `"..."` appended outside the cap (truncated result ≤ n+3 bytes; within-cap input byte-identical, no marker). Non-positive n yields `"..."` for non-empty input; `""` stays `""`. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
 | `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |

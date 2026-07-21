@@ -24,9 +24,13 @@ import (
 //     handler, through groups, before encoding.
 //   - fmt and errors: String implements fmt.Stringer, so %s, %v, %q — and
 //     fmt.Errorf("upstream said %s", v) — render sanitized text. An error
-//     built this way is safe at construction, the one boundary that covers
-//     error values (slog handlers stringify errors inside the encoder,
-//     after any attribute rewriting).
+//     built this way carries no escape introducers from construction on,
+//     the one boundary that covers error values (slog handlers stringify
+//     errors inside the encoder, after any attribute rewriting). String
+//     keeps CR/LF (the Sanitize preset), so the error text is safe where
+//     its eventual sink escapes or quotes them — slog's handlers, JSON —
+//     but not as-is for a hand-built sink that escapes nothing; there,
+//     build the message from SingleLine instead.
 //   - encoders: MarshalText implements encoding.TextMarshaler, so
 //     encoding/json and any TextMarshaler-aware encoder emit the
 //     Sanitize'd form, however deeply the value nests in a document.
@@ -77,7 +81,10 @@ func (u Untrusted) LogValue() slog.Value {
 }
 
 // String implements fmt.Stringer: %s, %v, %q, and fmt.Errorf render the
-// Sanitize'd form, so an error wrapping the value is safe at construction.
+// Sanitize'd form, so an error wrapping the value carries no escape
+// introducers from construction on. The form keeps CR/LF (see the type
+// comment): fine wherever the text is later quoted or encoded (slog, JSON),
+// not for a hand-built single-line sink — use SingleLine there.
 func (u Untrusted) String() string {
 	return Sanitize(string(u))
 }

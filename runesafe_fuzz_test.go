@@ -232,14 +232,16 @@ func FuzzUntrustedContract(f *testing.F) {
 // FuzzSanitizeSingleLineBounded pins the preset's invariants for arbitrary
 // input and cap: the result is valid UTF-8 carrying no unsafe rune under the
 // strict policy, its length never exceeds max(n,0)+3 (the marker rides
-// outside the cap), a within-cap result is byte-identical to the unbounded
-// SanitizeSingleLine form, and an over-cap result is that form's rune-safe
-// prefix plus the marker.
+// outside the cap), a within-cap result — and empty input under any cap,
+// negative included — is byte-identical to the unbounded SanitizeSingleLine
+// form, and an over-cap result is that form's rune-safe prefix plus the
+// marker.
 func FuzzSanitizeSingleLineBounded(f *testing.F) {
 	f.Add("hello", 5)
 	f.Add("a\nb\x1bc", 3)
 	f.Add("\xff\xfe\xfd", 4)
 	f.Add("", 0)
+	f.Add("", -1)
 	f.Add("é\u202e\u2028x", 2)
 	f.Fuzz(func(t *testing.T, s string, n int) {
 		got := runesafe.SanitizeSingleLineBounded(s, n)
@@ -255,7 +257,7 @@ func FuzzSanitizeSingleLineBounded(f *testing.F) {
 			t.Fatalf("output %d bytes exceeds cap %d plus marker: %q", len(got), n, got)
 		}
 		full := runesafe.SanitizeSingleLine(s)
-		if len(full) <= n {
+		if full == "" || len(full) <= n {
 			if got != full {
 				t.Fatalf("within-cap output %q differs from SanitizeSingleLine %q", got, full)
 			}
