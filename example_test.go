@@ -44,6 +44,19 @@ func ExampleIsUnsafe() {
 	// true true
 }
 
+// ExampleSanitizeSingleLineBounded bounds an upstream error message for a
+// capped log attribute: sanitization happens before the cap is measured, a
+// within-cap result comes back untouched, and an over-cap result is cut on
+// a rune boundary with the "..." marker appended outside the cap (at most
+// n+3 bytes).
+func ExampleSanitizeSingleLineBounded() {
+	fmt.Printf("%q\n", runesafe.SanitizeSingleLineBounded("bad\nrequest", 20))
+	fmt.Printf("%q\n", runesafe.SanitizeSingleLineBounded("葬送のフリーレン", 7))
+	// Output:
+	// "bad request"
+	// "葬送..."
+}
+
 // ExampleIsBidiControl classifies a right-to-left override against a plain
 // letter.
 func ExampleIsBidiControl() {

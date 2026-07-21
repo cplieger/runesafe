@@ -45,10 +45,13 @@
 // single-line sinks) apply the two policies to whole strings, replacing
 // each unsafe rune with a space. CapBytes truncates on a rune boundary, so
 // a byte cap applied after sanitizing cannot re-introduce a partial-rune C1
-// tail. Apply the sanitizer at the emit boundary (the slog call site, just
-// before JSON encoding) so comparisons and dedupe keys keep operating on
-// the raw value, and use one policy per application so two sinks cannot
-// drift.
+// tail, and SanitizeSingleLineBounded packages the log-bound composition —
+// SanitizeSingleLine, then CapBytes on the sanitized form, then a "..."
+// marker outside the cap — for upstream-controlled values headed into
+// capped log attributes. Apply the sanitizer at the emit boundary (the slog
+// call site, just before JSON encoding) so comparisons and dedupe keys keep
+// operating on the raw value, and use one policy per application so two
+// sinks cannot drift.
 //
 // The package is one deliberately small policy. It is not an HTML/XSS
 // sanitizer, does not normalize Unicode (NFC/NFKC), and does not touch

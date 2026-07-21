@@ -269,7 +269,9 @@ func TestSanitizeSingleLineBounded(t *testing.T) {
 		{"rune boundary respected", "aé", 2, "a..."},
 		{"cap measures sanitized growth", "\xff\xff", 3, "\uFFFD..."},
 		{"non-positive cap yields the marker alone", "abc", 0, "..."},
+		{"negative cap yields the marker alone", "abc", -2, "..."},
 		{"empty input stays empty", "", 0, ""},
+		{"empty input with negative cap stays empty", "", -1, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

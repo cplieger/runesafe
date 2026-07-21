@@ -90,12 +90,15 @@ func SanitizeSingleLine(s string) string {
 // sanitize-cap-mark composition. The cap applies to the SANITIZED form
 // (sanitizing can grow invalid bytes into the three-byte U+FFFD, so a
 // pre-sanitize cap does not survive), and the marker sits outside the cap: a
-// truncated result is at most n+3 bytes, and the marker's presence is the
-// truncation signal. A non-positive n yields "..." alone for a non-empty
-// input ("" stays "").
+// truncated result is at most n+3 bytes and always ends in the marker. The
+// converse does not hold — a within-cap input may itself end in "..." — so
+// the marker marks the cut without proving one; a caller that must know
+// whether truncation occurred composes SanitizeSingleLine and CapBytes
+// itself. A non-positive n yields "..." alone for a non-empty input
+// ("" stays "", whatever n is).
 func SanitizeSingleLineBounded(s string, n int) string {
 	s = SanitizeSingleLine(s)
-	if len(s) <= n {
+	if s == "" || len(s) <= n {
 		return s
 	}
 	return CapBytes(s, n) + "..."
