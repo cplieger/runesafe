@@ -249,3 +249,33 @@ func TestIsUnsafeNonASCII(t *testing.T) {
 		}
 	}
 }
+
+// TestSanitizeSingleLineBounded covers the log-bound preset: within-cap
+// input is byte-identical to SanitizeSingleLine (no marker), an over-cap
+// result truncates on a rune boundary with the "..." marker outside the cap,
+// the cap measures the SANITIZED form (invalid bytes grow into U+FFFD), and
+// the non-positive-cap and empty-input edges hold.
+func TestSanitizeSingleLineBounded(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		n    int
+		want string
+	}{
+		{"within cap untouched", "hello", 10, "hello"},
+		{"exactly at cap untouched", "hello", 5, "hello"},
+		{"over cap truncated with marker", "hello world", 5, "hello..."},
+		{"sanitizes before capping", "a\nb\x1bc", 10, "a b c"},
+		{"rune boundary respected", "aé", 2, "a..."},
+		{"cap measures sanitized growth", "\xff\xff", 3, "\uFFFD..."},
+		{"non-positive cap yields the marker alone", "abc", 0, "..."},
+		{"empty input stays empty", "", 0, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := runesafe.SanitizeSingleLineBounded(tc.in, tc.n); got != tc.want {
+				t.Errorf("SanitizeSingleLineBounded(%q, %d) = %q, want %q", tc.in, tc.n, got, tc.want)
+			}
+		})
+	}
+}

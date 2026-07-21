@@ -79,6 +79,28 @@ func SanitizeSingleLine(s string) string {
 	return sanitize(s, false)
 }
 
+// SanitizeSingleLineBounded is SanitizeSingleLine followed by a byte cap: an
+// over-cap result is truncated to at most n bytes on a rune boundary
+// (CapBytes) with "..." appended to mark the cut, while a result within the
+// cap is returned untouched — no marker, byte-identical to the unbounded
+// form. It is the log-bound preset for VOLUME as well as rune safety: an
+// upstream-controlled value headed for a log attribute (a query parameter, a
+// JSON key name, an upstream error body) must not balloon a record past
+// downstream log-pipeline limits, and every consumer hand-rolled exactly this
+// sanitize-cap-mark composition. The cap applies to the SANITIZED form
+// (sanitizing can grow invalid bytes into the three-byte U+FFFD, so a
+// pre-sanitize cap does not survive), and the marker sits outside the cap: a
+// truncated result is at most n+3 bytes, and the marker's presence is the
+// truncation signal. A non-positive n yields "..." alone for a non-empty
+// input ("" stays "").
+func SanitizeSingleLineBounded(s string, n int) string {
+	s = SanitizeSingleLine(s)
+	if len(s) <= n {
+		return s
+	}
+	return CapBytes(s, n) + "..."
+}
+
 // sanitize applies the IsUnsafe policy to every rune of s, replacing each
 // unsafe rune with a space via strings.Map (which also converts each invalid
 // UTF-8 byte to U+FFFD, a safe rune under both policies).
