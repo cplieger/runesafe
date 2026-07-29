@@ -48,7 +48,16 @@
 // tail, and SanitizeSingleLineBounded packages the log-bound composition —
 // SanitizeSingleLine, then CapBytes on the sanitized form, then a "..."
 // marker outside the cap — for upstream-controlled values headed into
-// capped log attributes. Apply the sanitizer at the emit boundary (the slog
+// capped log attributes. SanitizeCapped and SanitizeSingleLineCapped are
+// the general form of that composition, one per CR/LF policy, for the
+// callers the preset cannot serve: the marker is caller-supplied and
+// charged against the cap, so the returned text is a hard total bound (what
+// a persisted record's write limit or a vendor payload budget needs), and
+// the truncation fact comes back as a second result instead of having to be
+// inferred from the marker. Neither serves a caller that must cap BEFORE
+// sanitizing to bound the sanitizer's work, nor one that keeps a value's
+// tail behind a prefixed marker. Apply the sanitizer at the emit boundary
+// (the slog
 // call site, just before JSON encoding) so comparisons and dedupe keys keep
 // operating on the raw value, and use one policy per application so two
 // sinks cannot drift.

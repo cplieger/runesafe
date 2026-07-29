@@ -281,3 +281,103 @@ func TestSanitizeSingleLineBounded(t *testing.T) {
 		})
 	}
 }
+
+// TestSanitizeCappedPair covers the caller-marker primitive on both CR/LF
+// policies at once (the two functions share every axis but that policy, and
+// sanitizing is 1:1 per rune so the cut decision is identical for both): the
+// marker is charged against the cap so the total never exceeds max(n, 0), a
+// within-cap value comes back untouched with cut false, a cap too small for
+// the marker drops the marker rather than emitting a fragment, an empty
+// marker caps silently, the cut is measured on the SANITIZED form (invalid
+// bytes grow into U+FFFD), and every truncation lands on a rune boundary.
+func TestSanitizeCappedPair(t *testing.T) {
+	tests := []struct {
+		name       string
+		in         string
+		n          int
+		marker     string
+		wantKeep   string
+		wantStrict string
+		wantCut    bool
+	}{
+		{"within cap untouched", "hello", 10, "...", "hello", "hello", false},
+		{"exactly at cap untouched", "hello", 5, "...", "hello", "hello", false},
+		{"marker charged against the cap", "hello world", 8, "...", "hello...", "hello...", true},
+		{"total never exceeds the cap", "hello world", 5, "...", "he...", "he...", true},
+		{"cap equals marker width yields the marker alone", "hello", 3, "...", "...", "...", true},
+		{"cap below marker width drops the marker", "hello world", 2, "...", "he", "he", true},
+		{"louder caller marker fills the cap", "hello world again", 14, "...(truncated)", "...(truncated)", "...(truncated)", true},
+		{"louder marker over budget is dropped", "hello world", 10, "...(truncated)", "hello worl", "hello worl", true},
+		{"empty marker caps silently", "hello world", 5, "", "hello", "hello", true},
+		{"non-positive cap yields empty", "abc", 0, "...", "", "", true},
+		{"negative cap yields empty", "abc", -3, "...", "", "", true},
+		{"empty input stays empty", "", 5, "...", "", "", false},
+		{"empty input with negative cap stays empty", "", -1, "...", "", "", false},
+		{"CRLF policy divergence within cap", "a\r\nb", 10, "...", "a\r\nb", "a  b", false},
+		{"CRLF policy divergence over cap", "ab\ncd", 4, "...", "a...", "a...", true},
+		{"unsafe runes replaced before capping", "a\x1b\u202eb", 10, "...", "a  b", "a  b", false},
+		{"three-byte rune backoff", "葬送のフリーレン", 10, "...", "葬送...", "葬送...", true},
+		{"two-byte rune backoff below marker width", "aé", 2, "...", "a", "a", true},
+		{"four-byte rune backoff with one-byte marker", "a\U0001f600b", 5, "*", "a*", "a*", true},
+		{"cut measured on sanitized growth", "\xff\xff\xff", 8, "...", "\ufffd...", "\ufffd...", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, p := range []struct {
+				name string
+				fn   func(string, int, string) (string, bool)
+				want string
+			}{
+				{"SanitizeCapped", runesafe.SanitizeCapped, tc.wantKeep},
+				{"SanitizeSingleLineCapped", runesafe.SanitizeSingleLineCapped, tc.wantStrict},
+			} {
+				got, cut := p.fn(tc.in, tc.n, tc.marker)
+				if got != p.want || cut != tc.wantCut {
+					t.Errorf("%s(%q, %d, %q) = (%q, %v), want (%q, %v)",
+						p.name, tc.in, tc.n, tc.marker, got, cut, p.want, tc.wantCut)
+				}
+				if bound := max(tc.n, 0); len(got) > bound {
+					t.Errorf("%s(%q, %d, %q) = %q, %d bytes exceeds the hard cap %d",
+						p.name, tc.in, tc.n, tc.marker, got, len(got), bound)
+				}
+				if !utf8.ValidString(got) {
+					t.Errorf("%s(%q, %d, %q) = %q, not valid UTF-8", p.name, tc.in, tc.n, tc.marker, got)
+				}
+			}
+		})
+	}
+}
+
+// legacySanitizeSingleLineBounded is a verbatim copy of the preset's
+// implementation from before it was rebuilt on the shared cap-and-mark
+// engine, kept as the parity oracle for the ~15 plain call sites across the
+// fleet whose output must not move by a byte.
+func legacySanitizeSingleLineBounded(s string, n int) string {
+	s = runesafe.SanitizeSingleLine(s)
+	if s == "" || len(s) <= n {
+		return s
+	}
+	return runesafe.CapBytes(s, n) + "..."
+}
+
+// TestSanitizeSingleLineBoundedParity pins the rebuilt preset byte-for-byte
+// against that oracle across the adversarial corpus and every interesting
+// cap, including the caps just below the marker's own width and the
+// n < len(s) <= n+3 window where a marker-inside-cap primitive would decide
+// differently. The preset's marker stays OUTSIDE its cap; that is its
+// contract, not a defect the rebuild corrects.
+func TestSanitizeSingleLineBoundedParity(t *testing.T) {
+	inputs := []string{
+		"", "a", "hello world", "already ends in...", "a\nb\r\nc", "a\x1b[2Jb",
+		"a\u202evil\u202cb", "葬送のフリーレン", "a\U0001f600b", "\xff\xff\xff", "\xed\xa0\x80",
+	}
+	caps := []int{-5, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 100}
+	for _, in := range inputs {
+		for _, n := range caps {
+			got := runesafe.SanitizeSingleLineBounded(in, n)
+			if want := legacySanitizeSingleLineBounded(in, n); got != want {
+				t.Errorf("SanitizeSingleLineBounded(%q, %d) = %q, pre-rebuild form was %q", in, n, got, want)
+			}
+		}
+	}
+}

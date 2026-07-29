@@ -79,6 +79,77 @@ func SanitizeSingleLine(s string) string {
 	return sanitize(s, false)
 }
 
+// SanitizeCapped is Sanitize followed by a byte cap that INCLUDES the
+// marker. It sanitizes s under the keepCRLF=true policy (CR and LF survive,
+// for a sink whose encoder escapes them — JSON, slog's handlers), and if the
+// sanitized form exceeds n bytes it cuts that form on a rune boundary at
+// n-len(marker) bytes and appends marker, so the returned text is at most
+// max(n, 0) bytes whatever marker is. A within-cap value comes back
+// untouched — byte-identical to Sanitize, no marker.
+//
+// cut reports whether the sanitized form was SHORTENED, not whether
+// sanitizing rewrote anything: it is true exactly when that form did not fit
+// in n bytes, and false whenever the returned text is the whole sanitized
+// form. It exists because a marker cannot prove a cut — a value may end in
+// the marker on its own — so a caller that must report truncation as a fact
+// (a log attribute beside the value, a decision to keep a fuller copy
+// elsewhere) would otherwise re-implement this composition just to set its
+// own flag.
+//
+// n bounds the TOTAL, which is what a caller with a real budget needs: a
+// record persisted under a write limit, a payload assembled under a vendor
+// byte cap, a fixed-width column. SanitizeSingleLineBounded puts its marker
+// OUTSIDE the cap (a truncated result runs to n+3 bytes), which leaves such
+// a caller subtracting the marker's width by hand at every call site.
+//
+// A marker longer than n cannot be shown intact, and a partial marker is
+// indistinguishable from content, so for n < len(marker) the result is the
+// rune-boundary prefix of the sanitized form alone — the empty string for a
+// non-positive n — and the elision is reported through cut only. An empty
+// marker is legal and yields a silent cap (CapBytes over the sanitized form)
+// with the fact still returned. An empty s returns "" and false under any n,
+// negative included. marker is emitted verbatim, never sanitized: it is the
+// caller's own program text, and rewriting it would silently alter a chosen
+// mark — a marker assembled from untrusted input must be sanitized by the
+// caller first.
+//
+// The CR/LF policy is a second function rather than a parameter on this one,
+// deliberately: the package already expresses that choice as the named
+// Sanitize / SanitizeSingleLine pair, so a call site names its sink instead
+// of passing an opaque boolean next to two other tuning arguments. Only
+// IsUnsafe takes the flag, because a composed policy needs it as data.
+// SanitizeSingleLineCapped is the strict twin.
+//
+// Two consumer shapes this pair deliberately does NOT serve, and must not be
+// widened to serve:
+//
+//   - Capping BEFORE sanitizing, to bound the sanitizer's WORK rather than
+//     its output. A caller that must never walk a multi-megabyte upstream
+//     value in a memory-limited process caps the raw bytes first (CapBytes,
+//     then Sanitize on the chunk); this function sanitizes all of s by
+//     construction, and no marker placement changes that. Such a caller also
+//     tends to aggregate one truncation fact across several appends, which a
+//     single-call primitive cannot express.
+//   - Keeping the TAIL behind a PREFIXED marker. When the identifying part of
+//     a value sits at its end (a path's file name), the caller wants
+//     marker + suffix; this function keeps the head. Compose the
+//     rune-boundary walk locally for that.
+func SanitizeCapped(s string, n int, marker string) (text string, cut bool) {
+	return capMark(s, n, marker, true, true)
+}
+
+// SanitizeSingleLineCapped is SanitizeCapped under the strict keepCRLF=false
+// policy: CR and LF become spaces along with every other unsafe rune, for a
+// single-line sink where a raw newline forges a record boundary — a
+// plain-text log line, a one-line error message, a rendered table cell. The
+// cap, marker and cut contract are identical, marker counted INSIDE n and
+// the n < len(marker) degenerate case included; see SanitizeCapped for the
+// full contract, for why the CR/LF policy is a separate function, and for
+// the two consumer shapes the pair does not serve.
+func SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut bool) {
+	return capMark(s, n, marker, false, true)
+}
+
 // SanitizeSingleLineBounded is SanitizeSingleLine followed by a byte cap: an
 // over-cap result is truncated to at most n bytes on a rune boundary
 // (CapBytes) with "..." appended to mark the cut, while a result within the
@@ -93,15 +164,42 @@ func SanitizeSingleLine(s string) string {
 // truncated result is at most n+3 bytes and always ends in the marker. The
 // converse does not hold — a within-cap input may itself end in "..." — so
 // the marker marks the cut without proving one; a caller that must know
-// whether truncation occurred composes SanitizeSingleLine and CapBytes
-// itself. A non-positive n yields "..." alone for a non-empty input
-// ("" stays "", whatever n is).
+// whether truncation occurred, supply its own marker, or hold the total
+// (marker included) under a hard budget uses SanitizeSingleLineCapped, which
+// returns the fact and counts the marker inside the cap. A non-positive n
+// yields "..." alone for a non-empty input ("" stays "", whatever n is).
+// The marker's placement outside the cap is this preset's settled contract,
+// not an accident of its implementation: it stays as it is so every existing
+// call site keeps its byte-for-byte output.
 func SanitizeSingleLineBounded(s string, n int) string {
-	s = SanitizeSingleLine(s)
+	text, _ := capMark(s, n, defaultMarker, false, false)
+	return text
+}
+
+// defaultMarker is the truncation marker SanitizeSingleLineBounded appends.
+// The Capped pair takes the marker from the caller instead.
+const defaultMarker = "..."
+
+// capMark is the shared sanitize-cap-mark engine behind the bounded preset
+// and the Capped pair. It sanitizes s under the keepCRLF policy and, when the
+// sanitized form exceeds n bytes, cuts it on a rune boundary and appends
+// marker, reporting the cut. markerInCap selects whose budget the marker
+// spends: false leaves it outside (the total runs to n+len(marker), the
+// SanitizeSingleLineBounded contract), true charges it against n so the total
+// never exceeds max(n, 0) — and when n cannot even hold the marker, drops the
+// marker rather than emitting a fragment of it.
+func capMark(s string, n int, marker string, keepCRLF, markerInCap bool) (string, bool) {
+	s = sanitize(s, keepCRLF)
 	if s == "" || len(s) <= n {
-		return s
+		return s, false
 	}
-	return CapBytes(s, n) + "..."
+	if !markerInCap {
+		return CapBytes(s, n) + marker, true
+	}
+	if n < len(marker) {
+		return CapBytes(s, n), true
+	}
+	return CapBytes(s, n-len(marker)) + marker, true
 }
 
 // sanitize applies the IsUnsafe policy to every rune of s, replacing each

@@ -235,7 +235,9 @@ func FuzzUntrustedContract(f *testing.F) {
 // outside the cap), a within-cap result — and empty input under any cap,
 // negative included — is byte-identical to the unbounded SanitizeSingleLine
 // form, and an over-cap result is that form's rune-safe prefix plus the
-// marker.
+// marker. It also holds the preset byte-identical to its pre-rebuild
+// implementation (legacySanitizeSingleLineBounded), the contract every
+// existing call site depends on.
 func FuzzSanitizeSingleLineBounded(f *testing.F) {
 	f.Add("hello", 5)
 	f.Add("a\nb\x1bc", 3)
@@ -245,6 +247,9 @@ func FuzzSanitizeSingleLineBounded(f *testing.F) {
 	f.Add("é\u202e\u2028x", 2)
 	f.Fuzz(func(t *testing.T, s string, n int) {
 		got := runesafe.SanitizeSingleLineBounded(s, n)
+		if want := legacySanitizeSingleLineBounded(s, n); got != want {
+			t.Fatalf("SanitizeSingleLineBounded(%q, %d) = %q, pre-rebuild form was %q", s, n, got, want)
+		}
 		if !utf8.ValidString(got) {
 			t.Fatalf("invalid UTF-8 output: %q", got)
 		}
@@ -267,6 +272,74 @@ func FuzzSanitizeSingleLineBounded(f *testing.F) {
 			}
 			if prefix := strings.TrimSuffix(got, "..."); !strings.HasPrefix(full, prefix) {
 				t.Fatalf("truncated body %q is not a prefix of the sanitized form %q", prefix, full)
+			}
+		}
+	})
+}
+
+// FuzzSanitizeCapped drives the caller-marker primitive on both CR/LF
+// policies with arbitrary input, cap, and marker, and pins the three
+// guarantees its consumers rely on: the returned text NEVER exceeds
+// max(n, 0) bytes however long the marker is (the hard total bound a
+// persisted record or a vendor payload budget needs), cut is true exactly
+// when the sanitized form did not fit (and the text is then that form's
+// rune-safe prefix, plus the marker verbatim whenever the cap can hold it),
+// and an uncut result is byte-identical to the matching unbounded preset.
+// The marker is caller program text and deliberately not sanitized, so the
+// rune-policy and UTF-8 assertions apply to the body the primitive itself
+// produced.
+func FuzzSanitizeCapped(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s, 5, "...")
+	}
+	f.Add("hello world", 8, "...")
+	f.Add("hello world", 2, "...")
+	f.Add("hello", 3, "...")
+	f.Add("hello world", 10, "...(truncated)")
+	f.Add("葬送のフリーレン", 10, "...")
+	f.Add("a\U0001f600b", 5, "*")
+	f.Add("abc", 0, "")
+	f.Add("abc", -1, "...")
+	f.Add("", 4, "…")
+	f.Fuzz(func(t *testing.T, s string, n int, marker string) {
+		variants := []struct {
+			name     string
+			fn       func(string, int, string) (string, bool)
+			full     string
+			keepCRLF bool
+		}{
+			{"SanitizeCapped", runesafe.SanitizeCapped, runesafe.Sanitize(s), true},
+			{"SanitizeSingleLineCapped", runesafe.SanitizeSingleLineCapped, runesafe.SanitizeSingleLine(s), false},
+		}
+		for _, v := range variants {
+			out, cut := v.fn(s, n, marker)
+			if bound := max(n, 0); len(out) > bound {
+				t.Fatalf("%s(%q, %d, %q) = %q: %d bytes exceeds the hard cap %d", v.name, s, n, marker, out, len(out), bound)
+			}
+			if want := v.full != "" && len(v.full) > n; cut != want {
+				t.Fatalf("%s(%q, %d, %q) cut = %v, want %v (sanitized form is %d bytes)", v.name, s, n, marker, cut, want, len(v.full))
+			}
+			body := out
+			if cut {
+				if n >= len(marker) {
+					if !strings.HasSuffix(out, marker) {
+						t.Fatalf("%s(%q, %d, %q) = %q: cap holds the marker but the output does not end in it", v.name, s, n, marker, out)
+					}
+					body = out[:len(out)-len(marker)]
+				}
+				if !strings.HasPrefix(v.full, body) {
+					t.Fatalf("%s(%q, %d, %q) = %q: body %q is not a prefix of the sanitized form %q", v.name, s, n, marker, out, body, v.full)
+				}
+			} else if out != v.full {
+				t.Fatalf("%s(%q, %d, %q) = %q: an uncut result must equal the unbounded form %q", v.name, s, n, marker, out, v.full)
+			}
+			if !utf8.ValidString(body) {
+				t.Fatalf("%s(%q, %d, %q) = %q: body %q is not valid UTF-8", v.name, s, n, marker, out, body)
+			}
+			for _, r := range body {
+				if runesafe.IsUnsafe(r, v.keepCRLF) {
+					t.Fatalf("%s(%q, %d, %q) = %q: unsafe rune %U survived in the body", v.name, s, n, marker, out, r)
+				}
 			}
 		}
 	})
