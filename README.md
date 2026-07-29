@@ -64,6 +64,15 @@ slog.Warn("upstream rejected request",
     "reason", runesafe.SanitizeSingleLineBounded(upstreamErr.Error(), 200))
 ```
 
+When the cap is a real budget — a record persisted under a write limit, a payload assembled under a vendor byte cap, a fixed-width column — `SanitizeCapped` (CR/LF kept, for JSON sinks) and `SanitizeSingleLineCapped` (strict) take the marker from the caller and charge it **against** `n`, so the returned text never exceeds the limit, and they return the truncation fact rather than leaving it to be inferred from the marker:
+
+```go
+attr, cut := runesafe.SanitizeSingleLineCapped(key, maxLoggedKeyBytes, "...")
+slog.Warn("unknown upstream keys", "key", attr, "key_truncated", cut)
+```
+
+A cap too small to hold the marker drops the marker rather than emitting a fragment of it (`cut` still reports the elision); an empty marker caps silently. The marker is emitted verbatim, so build it from program text, not from untrusted input. Neither function serves a caller that must cap **before** sanitizing to bound the sanitizer's work on a huge value, nor one that keeps a value's tail behind a prefixed marker; compose those locally.
+
 ### Rune classification
 
 `IsUnsafe` exposes the policy rune-by-rune, with an explicit CR/LF switch:
@@ -137,6 +146,8 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `Sanitize(s string) string` | Replaces each unsafe rune (keepCRLF=true policy) with a space. Valid UTF-8 out, rune count preserved, idempotent. |
 | `SanitizeSingleLine(s string) string` | The strict preset (keepCRLF=false): everything `Sanitize` replaces, plus CR and LF. |
 | `SanitizeSingleLineBounded(s string, n int) string` | `SanitizeSingleLine`, then a rune-boundary cap of the sanitized form at n bytes with `"..."` appended outside the cap (truncated result ≤ n+3 bytes; within-cap input byte-identical, no marker). Non-positive n yields `"..."` for non-empty input; `""` stays `""`. |
+| `SanitizeCapped(s string, n int, marker string) (text string, cut bool)` | `Sanitize`, then a rune-boundary cap with the caller's marker counted **inside** the cap: the text is always ≤ max(n, 0) bytes. `cut` is true exactly when the sanitized form was shortened. A cap below `len(marker)` drops the marker; the marker is emitted verbatim, never sanitized. |
+| `SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut bool)` | The strict twin of `SanitizeCapped` (CR and LF replaced too), same cap, marker and `cut` contract. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
 | `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |

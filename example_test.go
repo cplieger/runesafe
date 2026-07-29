@@ -96,3 +96,27 @@ func ExampleUntrusted() {
 	// bad: Frieren gpj.exe
 	// {"title":"Frieren gpj.exe"}
 }
+
+// ExampleSanitizeCapped bounds a multi-line upstream body for a JSON sink:
+// CR/LF survive the sanitizer, the caller's own marker is charged against
+// the cap so the result never exceeds it, and cut carries the truncation
+// fact for the caller to record.
+func ExampleSanitizeCapped() {
+	body, cut := runesafe.SanitizeCapped("line one\nline two\x1b[2J", 16, "...(truncated)")
+	fmt.Printf("%q %v %d\n", body, cut, len(body))
+
+	body, cut = runesafe.SanitizeCapped("short\nbody", 16, "...(truncated)")
+	fmt.Printf("%q %v\n", body, cut)
+	// Output:
+	// "li...(truncated)" true 16
+	// "short\nbody" false
+}
+
+// ExampleSanitizeSingleLineCapped bounds an upstream error for a capped log
+// attribute and logs the truncation as a fact rather than inferring it from
+// the marker.
+func ExampleSanitizeSingleLineCapped() {
+	reason, cut := runesafe.SanitizeSingleLineCapped("bad request\nlevel=ERROR forged", 14, "...")
+	fmt.Printf("%q %v %d\n", reason, cut, len(reason))
+	// Output: "bad request..." true 14
+}
