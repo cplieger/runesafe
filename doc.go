@@ -54,9 +54,15 @@
 // charged against the cap, so the returned text is a hard total bound (what
 // a persisted record's write limit or a vendor payload budget needs), and
 // the truncation fact comes back as a second result instead of having to be
-// inferred from the marker. Neither serves a caller that must cap BEFORE
-// sanitizing to bound the sanitizer's work, nor one that keeps a value's
-// tail behind a prefixed marker. Apply the sanitizer at the emit boundary
+// inferred from the marker. Neither caps BEFORE sanitizing: their bound is
+// on what comes back, not on the work done to produce it. SanitizeBudgeted
+// and SanitizeSingleLineBudgeted are that same composition with the order
+// reversed, for an upstream value whose size the caller does not control,
+// where walking all of it is itself the exposure; Budget is their aggregate
+// form, spending one shared byte budget across several values and keeping ONE
+// truncation fact for the whole aggregate. Keeping a value's tail behind a
+// prefixed marker remains the caller's own rune-boundary walk.
+// Apply the sanitizer at the emit boundary
 // (the slog
 // call site, just before JSON encoding) so comparisons and dedupe keys keep
 // operating on the raw value, and use one policy per application so two

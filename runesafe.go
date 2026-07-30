@@ -129,7 +129,11 @@ func SanitizeSingleLine(s string) string {
 //     then Sanitize on the chunk); this function sanitizes all of s by
 //     construction, and no marker placement changes that. Such a caller also
 //     tends to aggregate one truncation fact across several appends, which a
-//     single-call primitive cannot express.
+//     single-call primitive cannot express. Both shapes belong to
+//     SanitizeBudgeted and Budget — a separate primitive carrying the cap
+//     ahead of the sanitizer and a running remainder, sharing this pair's
+//     rune-boundary cut, marker-inside-the-cap and cut-as-a-fact rules while
+//     leaving the contract above exactly as it is.
 //   - Keeping the TAIL behind a PREFIXED marker. When the identifying part of
 //     a value sits at its end (a path's file name), the caller wants
 //     marker + suffix; this function keeps the head. Compose the

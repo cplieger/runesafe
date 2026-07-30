@@ -3,6 +3,7 @@ package runesafe_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/cplieger/runesafe"
 )
@@ -119,4 +120,46 @@ func ExampleSanitizeSingleLineCapped() {
 	reason, cut := runesafe.SanitizeSingleLineCapped("bad request\nlevel=ERROR forged", 14, "...")
 	fmt.Printf("%q %v %d\n", reason, cut, len(reason))
 	// Output: "bad request..." true 14
+}
+
+// ExampleSanitizeBudgeted bounds an upstream value whose size the caller does
+// not control. The value is three megabytes of right-to-left overrides behind
+// one letter, and the budget is eight bytes: the pre-cap form cuts the RAW
+// input at the budget and sanitizes only that, so the two overrides that fit
+// below byte eight are all it ever looked at. SanitizeCapped sanitizes the
+// whole value first — every override collapsing to a single-byte space — and
+// then fills the same budget from the megabyte of spaces that produces, which
+// is the work the pre-cap exists to avoid.
+func ExampleSanitizeBudgeted() {
+	huge := "A" + strings.Repeat("\u202e", 1<<20)
+
+	text, cut := runesafe.SanitizeBudgeted(huge, 8, "...")
+	fmt.Printf("%q %v\n", text, cut)
+
+	text, cut = runesafe.SanitizeCapped(huge, 8, "...")
+	fmt.Printf("%q %v\n", text, cut)
+	// Output:
+	// "A  ..." true
+	// "A    ..." true
+}
+
+// ExampleBudget spends one shared byte budget across several untrusted values
+// and keeps ONE truncation fact for the whole aggregate: each value is capped
+// before it is sanitized, the separators are charged too (so a hostile value
+// COUNT cannot grow the attribute either), and the marker is charged inside the
+// budget, so the joined attribute lands exactly on it with a single marker
+// rather than one per value.
+func ExampleBudget() {
+	b := runesafe.NewBudget(24, "...")
+	for i, group := range []string{"SubsPlease", "Erai-raws\u202e", "LostYears", "PMR"} {
+		if i > 0 && !b.Write(", ") {
+			break
+		}
+		if !b.Write(group) {
+			break
+		}
+	}
+	attr, cut := b.Result()
+	fmt.Printf("%q %v %d\n", attr, cut, len(attr))
+	// Output: "SubsPlease, Erai-raws..." true 24
 }

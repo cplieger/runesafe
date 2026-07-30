@@ -344,3 +344,93 @@ func FuzzSanitizeCapped(f *testing.F) {
 		}
 	})
 }
+
+// FuzzBudget drives the work-bounding primitive on both CR/LF policies with
+// arbitrary input, budget, and marker, and pins what separates it from the
+// Capped pair. Three guarantees are shared with that pair and asserted the same
+// way: the text never exceeds max(n, 0) bytes however long the marker is, the
+// body the primitive produced is valid UTF-8 carrying no rune its own policy
+// calls unsafe, and an uncut result is byte-identical to the matching unbounded
+// preset. Two are its own. The WORK bound is structural rather than timed: the
+// body must be a prefix of the sanitized form of a rune-boundary prefix of s at
+// most max(n, 0) bytes long, so nothing in the result can have come from beyond
+// the budget — which is only possible if the raw cap ran before the sanitizer.
+// And the packaged form must equal the hand-rolled composition of CapBytes,
+// Sanitize and CapBytes it exists to replace (composedBudgeted). The aggregate
+// form is held to the same total bound across two writes, with the truncation
+// fact monotone once latched.
+func FuzzBudget(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s, 5, "...")
+	}
+	f.Add("A"+strings.Repeat("\u202e", 64), 8, "...")
+	f.Add(strings.Repeat("\u202e", 5), 10, "...")
+	f.Add("hello world", 8, "...")
+	f.Add("hello world", 2, "...")
+	f.Add("hello world", 10, "...(truncated)")
+	f.Add("葬送のフリーレン", 10, "...")
+	f.Add("a\U0001f600b", 5, "*")
+	f.Add("\xff\xff\xff", 8, "...")
+	f.Add("abc", 0, "")
+	f.Add("abc", -1, "...")
+	f.Add("", 4, "…")
+	f.Fuzz(func(t *testing.T, s string, n int, marker string) {
+		variants := []struct {
+			name      string
+			fn        func(string, int, string) (string, bool)
+			newBudget func(int, string) *runesafe.Budget
+			sanitize  func(string) string
+			keepCRLF  bool
+		}{
+			{"SanitizeBudgeted", runesafe.SanitizeBudgeted, runesafe.NewBudget, runesafe.Sanitize, true},
+			{"SanitizeSingleLineBudgeted", runesafe.SanitizeSingleLineBudgeted, runesafe.NewSingleLineBudget, runesafe.SanitizeSingleLine, false},
+		}
+		bound := max(n, 0)
+		for _, v := range variants {
+			out, cut := v.fn(s, n, marker)
+			if len(out) > bound {
+				t.Fatalf("%s(%q, %d, %q) = %q: %d bytes exceeds the hard cap %d", v.name, s, n, marker, out, len(out), bound)
+			}
+			wantText, wantCut := composedBudgeted(s, n, marker, v.sanitize)
+			if out != wantText || cut != wantCut {
+				t.Fatalf("%s(%q, %d, %q) = (%q, %v), hand-composed form is (%q, %v)", v.name, s, n, marker, out, cut, wantText, wantCut)
+			}
+			body := out
+			if cut && n >= len(marker) {
+				if !strings.HasSuffix(out, marker) {
+					t.Fatalf("%s(%q, %d, %q) = %q: cap holds the marker but the output does not end in it", v.name, s, n, marker, out)
+				}
+				body = out[:len(out)-len(marker)]
+			}
+			if !cut && out != v.sanitize(s) {
+				t.Fatalf("%s(%q, %d, %q) = %q: an uncut result must equal the unbounded form %q", v.name, s, n, marker, out, v.sanitize(s))
+			}
+			if walked := v.sanitize(runesafe.CapBytes(s, n)); !strings.HasPrefix(walked, body) {
+				t.Fatalf("%s(%q, %d, %q) = %q: body %q is not a prefix of %q, the sanitized form of the budgeted raw prefix",
+					v.name, s, n, marker, out, body, walked)
+			}
+			if !utf8.ValidString(body) {
+				t.Fatalf("%s(%q, %d, %q) = %q: body %q is not valid UTF-8", v.name, s, n, marker, out, body)
+			}
+			for _, r := range body {
+				if runesafe.IsUnsafe(r, v.keepCRLF) {
+					t.Fatalf("%s(%q, %d, %q) = %q: unsafe rune %U survived in the body", v.name, s, n, marker, out, r)
+				}
+			}
+
+			b := v.newBudget(n, marker)
+			b.Write(s)
+			if one, oneCut := b.Result(); one != out || oneCut != cut {
+				t.Fatalf("one Write into %s's budget = (%q, %v), want the single-value form (%q, %v)", v.name, one, oneCut, out, cut)
+			}
+			b.Write(s)
+			two, twoCut := b.Result()
+			if len(two) > bound {
+				t.Fatalf("two writes of %q under budget %d = %q: %d bytes exceeds the hard cap %d", s, n, two, len(two), bound)
+			}
+			if cut && !twoCut {
+				t.Fatalf("two writes of %q under budget %d = (%q, false): the truncation fact must stay latched", s, n, two)
+			}
+		}
+	})
+}
