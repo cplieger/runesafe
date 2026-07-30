@@ -71,7 +71,36 @@ attr, cut := runesafe.SanitizeSingleLineCapped(key, maxLoggedKeyBytes, "...")
 slog.Warn("unknown upstream keys", "key", attr, "key_truncated", cut)
 ```
 
-A cap too small to hold the marker drops the marker rather than emitting a fragment of it (`cut` still reports the elision); an empty marker caps silently. The marker is emitted verbatim, so build it from program text, not from untrusted input. Neither function serves a caller that must cap **before** sanitizing to bound the sanitizer's work on a huge value, nor one that keeps a value's tail behind a prefixed marker; compose those locally.
+A cap too small to hold the marker drops the marker rather than emitting a fragment of it (`cut` still reports the elision); an empty marker caps silently. The marker is emitted verbatim, so build it from program text, not from untrusted input.
+
+### Bounding the sanitizer's work
+
+Everything above bounds what comes back. When the value's size is not the caller's to control — an upstream response field, an error message interpolating one, a file name — the bound has to cover the work as well: walking a multi-megabyte value with `strings.Map` inside a memory-limited process is a work-amplification denial of service ([CWE-400](https://cwe.mitre.org/data/definitions/400.html)) whatever the output cap is. `SanitizeBudgeted` and `SanitizeSingleLineBudgeted` are the `Capped` pair with the cap moved **ahead** of the sanitizer: the raw bytes are cut on a rune boundary first, only that chunk is sanitized, the growth sanitizing can cause is re-capped, and the caller's marker is still charged inside `n`.
+
+```go
+label, cut := runesafe.SanitizeSingleLineBudgeted(upstreamLabel, 64, "...(truncated)")
+slog.Warn("skipped block", "type", label, "type_truncated", cut)
+```
+
+For a value carrying no unsafe rune the two orders are byte-identical, cut for cut, so moving a call site onto this one changes nothing an honest value emits. They diverge for exactly one input class: a value whose **raw** form exceeds `n` but whose **sanitized** form would have fitted, which takes enough multi-byte unsafe runes to collapse it under the cap (each becomes a single-byte space). This order cuts and marks such a value; the mark is honest either way, because bytes really were dropped before sanitizing.
+
+`Budget` is the aggregate form, for an attribute assembled from several untrusted values that must share ONE byte budget and report ONE truncation fact. Joining first and capping afterwards allocates the whole untrusted aggregate before the bound applies, which is the same amplification one value at a time:
+
+```go
+b := runesafe.NewBudget(maxAttrBytes, "...")
+for i, group := range upstream.Groups {
+    if i > 0 && !b.Write(", ") {
+        break
+    }
+    if !b.Write(group) { // false once anything has been dropped
+        break
+    }
+}
+attr, cut := b.Result()
+slog.Warn("better release available", "groups", attr, "groups_truncated", cut)
+```
+
+Separators go through `Write` too, so a hostile value **count** cannot grow the attribute past the budget either. The marker is appended once for the whole aggregate, charged inside the budget, so `Result` never exceeds `max(n, 0)` bytes. `Write` reports whether the aggregate is still whole rather than whether the budget has room: a caller must attempt the write it cannot fit, because the refusal is what latches the fact.
 
 ### Rune classification
 
@@ -148,6 +177,11 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `SanitizeSingleLineBounded(s string, n int) string` | `SanitizeSingleLine`, then a rune-boundary cap of the sanitized form at n bytes with `"..."` appended outside the cap (truncated result ≤ n+3 bytes; within-cap input byte-identical, no marker). Non-positive n yields `"..."` for non-empty input; `""` stays `""`. |
 | `SanitizeCapped(s string, n int, marker string) (text string, cut bool)` | `Sanitize`, then a rune-boundary cap with the caller's marker counted **inside** the cap: the text is always ≤ max(n, 0) bytes. `cut` is true exactly when the sanitized form was shortened. A cap below `len(marker)` drops the marker; the marker is emitted verbatim, never sanitized. |
 | `SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut bool)` | The strict twin of `SanitizeCapped` (CR and LF replaced too), same cap, marker and `cut` contract. |
+| `SanitizeBudgeted(s string, n int, marker string) (text string, cut bool)` | `SanitizeCapped` with the cap **ahead** of the sanitizer: `s` is cut on a rune boundary at n bytes first, only that chunk is sanitized, its growth is re-capped, and the marker is charged inside n. Bounds the sanitizer's WORK, for a value whose size the caller does not control. Identical to `SanitizeCapped` for any value carrying no unsafe rune. |
+| `SanitizeSingleLineBudgeted(s string, n int, marker string) (text string, cut bool)` | The strict twin of `SanitizeBudgeted` (CR and LF replaced too), same pre-cap, marker and `cut` contract. |
+| `NewBudget(n int, marker string) *Budget` / `NewSingleLineBudget(...)` | One shared n-byte budget for SEVERAL untrusted values, one per CR/LF policy. Each value is capped before it is sanitized; the marker is charged inside n. |
+| `(*Budget).Write(raw string) bool` | Append `raw`'s sanitized, pre-capped prefix against the remaining budget. Reports whether the aggregate is still whole — deliberately not "the budget has room", so a caller loops until a write is actually refused. Separators go through it too. |
+| `(*Budget).Result() (text string, cut bool)` | The aggregate and the ONE truncation fact latched across every write, marked once and never longer than max(n, 0) bytes. Reads without spending; calling it twice returns the same pair. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
 | `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
