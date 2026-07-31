@@ -1,6 +1,7 @@
 package runesafe_test
 
 import (
+	"strings"
 	"testing"
 	"unicode"
 	"unicode/utf8"
@@ -358,6 +359,74 @@ func legacySanitizeSingleLineBounded(s string, n int) string {
 		return s
 	}
 	return runesafe.CapBytes(s, n) + "..."
+}
+
+// legacyCapped is a verbatim copy of the private sanitize-cap-mark engine the
+// Capped pair ran on before that pair was collapsed onto the Budget engine,
+// kept as the parity oracle for its published contract: it sanitizes ALL of the
+// value and bounds the SANITIZED form, which is the side of the documented
+// Capped/Budgeted divergence its existing call sites depend on.
+func legacyCapped(s string, n int, marker string, sanitize func(string) string) (string, bool) {
+	s = sanitize(s)
+	if s == "" || len(s) <= n {
+		return s, false
+	}
+	if n < len(marker) {
+		return runesafe.CapBytes(s, n), true
+	}
+	return runesafe.CapBytes(s, n-len(marker)) + marker, true
+}
+
+// TestSanitizeCappedParity holds the collapsed pair byte-for-byte against that
+// oracle across the adversarial corpus, every interesting cap and several marker
+// widths, and pins the delegation itself in the same sweep: a Capped call equals
+// its Budget equivalent over the sanitized value, which is what makes the two
+// bounds one implementation rather than two that happen to agree.
+//
+// The corpus carries the divergence class deliberately — a value whose RAW bytes
+// exceed the cap while its sanitized form fits, because multi-byte unsafe runes
+// collapse to single-byte spaces. That is where the work-bounding order cuts and
+// marks (TestSanitizeBudgetedPair's last row) and this pair must still return
+// the whole sanitized form unmarked; feeding the raw value to the budget instead
+// of the sanitized one would flip exactly these rows.
+func TestSanitizeCappedParity(t *testing.T) {
+	inputs := []string{
+		"", "a", "hello world", "already ends in...", "a\r\nb", "ab\ncd",
+		"a\x1b[2Jb", "a\u009b2Jb", "a\u202evil\u202cb", "葬送のフリーレン",
+		"a\U0001f600b", "aé", "\xff\xff\xff", "\xed\xa0\x80",
+		strings.Repeat("\u202e", 5), "A" + strings.Repeat("\u202e", 64),
+	}
+	markers := []string{"...", "", "*", "…", "...(truncated)"}
+	caps := []int{-5, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 100}
+	policies := []struct {
+		name     string
+		capped   func(string, int, string) (string, bool)
+		budgeted func(string, int, string) (string, bool)
+		sanitize func(string) string
+	}{
+		{"SanitizeCapped", runesafe.SanitizeCapped, runesafe.SanitizeBudgeted, runesafe.Sanitize},
+		{"SanitizeSingleLineCapped", runesafe.SanitizeSingleLineCapped, runesafe.SanitizeSingleLineBudgeted, runesafe.SanitizeSingleLine},
+	}
+
+	for _, in := range inputs {
+		for _, marker := range markers {
+			for _, n := range caps {
+				for _, p := range policies {
+					got, cut := p.capped(in, n, marker)
+					wantText, wantCut := legacyCapped(in, n, marker, p.sanitize)
+					if got != wantText || cut != wantCut {
+						t.Errorf("%s(%q, %d, %q) = (%q, %v), pre-collapse form was (%q, %v)",
+							p.name, in, n, marker, got, cut, wantText, wantCut)
+					}
+					delegated, delegatedCut := p.budgeted(p.sanitize(in), n, marker)
+					if got != delegated || cut != delegatedCut {
+						t.Errorf("%s(%q, %d, %q) = (%q, %v), its budgeted equivalent over the sanitized value is (%q, %v)",
+							p.name, in, n, marker, got, cut, delegated, delegatedCut)
+					}
+				}
+			}
+		}
+	}
 }
 
 // TestSanitizeSingleLineBoundedParity pins the rebuilt preset byte-for-byte
