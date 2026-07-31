@@ -139,7 +139,17 @@ func SanitizeSingleLine(s string) string {
 //     marker + suffix; this function keeps the head. Compose the
 //     rune-boundary walk locally for that.
 func SanitizeCapped(s string, n int, marker string) (text string, cut bool) {
-	return capMark(s, n, marker, true, true)
+	// The rune-boundary cut, the marker charged inside the cap and the cut
+	// FACT are the Budget engine's, so there is one copy of that arithmetic
+	// rather than one per bound. Sanitizing FIRST is what keeps this pair's
+	// OUTPUT bound, and with it the pair's side of the one divergence
+	// documented on SanitizeBudgeted: the budget is spent on the sanitized
+	// form, so a value whose RAW bytes exceed n while its sanitized form fits
+	// still comes back whole and unmarked here. The budget's own pre-cap then
+	// has nothing left to collapse, and its sanitizer pass is a no-op —
+	// Sanitize is idempotent and its output is valid UTF-8 — so the bytes
+	// spent are exactly the sanitized form this function has always bounded.
+	return SanitizeBudgeted(Sanitize(s), n, marker)
 }
 
 // SanitizeSingleLineCapped is SanitizeCapped under the strict keepCRLF=false
@@ -151,7 +161,9 @@ func SanitizeCapped(s string, n int, marker string) (text string, cut bool) {
 // full contract, for why the CR/LF policy is a separate function, and for
 // the two consumer shapes the pair does not serve.
 func SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut bool) {
-	return capMark(s, n, marker, false, true)
+	// Sanitize-then-budget under the strict policy on both halves; see
+	// SanitizeCapped for why that order is what preserves this pair's bound.
+	return SanitizeSingleLineBudgeted(SanitizeSingleLine(s), n, marker)
 }
 
 // SanitizeSingleLineBounded is SanitizeSingleLine followed by a byte cap: an
@@ -176,35 +188,21 @@ func SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut 
 // not an accident of its implementation: it stays as it is so every existing
 // call site keeps its byte-for-byte output.
 func SanitizeSingleLineBounded(s string, n int) string {
-	text, _ := capMark(s, n, defaultMarker, false, false)
-	return text
+	// The marker rides OUTSIDE the cap here, so this preset shares no
+	// arithmetic with the marker-inside-the-cap bound the Capped pair and the
+	// Budget engine hold in common; what is left is a short composition of the
+	// package's own primitives. The empty-input guard is what keeps "" empty
+	// under a non-positive cap instead of marking it.
+	clean := sanitize(s, false)
+	if clean == "" || len(clean) <= n {
+		return clean
+	}
+	return CapBytes(clean, n) + defaultMarker
 }
 
 // defaultMarker is the truncation marker SanitizeSingleLineBounded appends.
 // The Capped pair takes the marker from the caller instead.
 const defaultMarker = "..."
-
-// capMark is the shared sanitize-cap-mark engine behind the bounded preset
-// and the Capped pair. It sanitizes s under the keepCRLF policy and, when the
-// sanitized form exceeds n bytes, cuts it on a rune boundary and appends
-// marker, reporting the cut. markerInCap selects whose budget the marker
-// spends: false leaves it outside (the total runs to n+len(marker), the
-// SanitizeSingleLineBounded contract), true charges it against n so the total
-// never exceeds max(n, 0) — and when n cannot even hold the marker, drops the
-// marker rather than emitting a fragment of it.
-func capMark(s string, n int, marker string, keepCRLF, markerInCap bool) (string, bool) {
-	s = sanitize(s, keepCRLF)
-	if s == "" || len(s) <= n {
-		return s, false
-	}
-	if !markerInCap {
-		return CapBytes(s, n) + marker, true
-	}
-	if n < len(marker) {
-		return CapBytes(s, n), true
-	}
-	return CapBytes(s, n-len(marker)) + marker, true
-}
 
 // sanitize applies the IsUnsafe policy to every rune of s, replacing each
 // unsafe rune with a space via strings.Map (which also converts each invalid
