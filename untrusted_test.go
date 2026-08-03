@@ -198,6 +198,16 @@ func TestUntrustedKeptCRLFCannotForgeRecord(t *testing.T) {
 // limitation: a string-kinded map key never routes through MarshalText,
 // so a map[Untrusted]V key marshals raw. If a future Go release changes
 // key resolution, this test fails and the doc caveat can be removed.
+//
+// EXPECTED TO FAIL ON GO 1.27, where the change is an IMPROVEMENT, not a
+// break: the v2-backed encoding/json routes map keys through MarshalText, so
+// the key is sanitized and the raw U+009B / U+202E this test looks for are
+// gone. Verified on Go 1.26.5 under GOEXPERIMENT=jsonv2. The remedy is to
+// retire the caveat rather than repair anything — invert this test to assert
+// the key IS sanitized, and delete the "Map KEYS are the one exception"
+// paragraph from Untrusted's doc plus the matching note on MarshalText. No
+// consumer relies on the limitation today (nothing in the fleet declares a
+// map[Untrusted]V), so nothing else has to move with it.
 func TestUntrustedMapKeyRawLimitation(t *testing.T) {
 	m := map[runesafe.Untrusted]int{"k\u009b\u202e": 1}
 	out, err := json.Marshal(m)
