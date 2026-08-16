@@ -68,6 +68,25 @@
 // operating on the raw value, and use one policy per application so two
 // sinks cannot drift.
 //
+// A caller that also removes a KNOWN secret value from the same text redacts
+// on both sides of the sanitizer and caps last, in the order
+// redact, sanitize, redact, cap. The before position earns its place because
+// the sanitizer rewrites an unsafe rune INSIDE a value, so a 32-character key
+// carrying one interior unsafe rune (a C0, C1 or bidi control, and under
+// SanitizeSingleLine also a CR or LF) reaches the sink as a near-complete
+// fragment that a full-value needle can no longer match. The after position
+// earns its place because a space and U+FFFD are the only runes the sanitizer
+// can PRODUCE, so a secret containing either can be constructed out of text
+// that did not match before it ran; an invalid UTF-8 byte becoming U+FFFD is
+// the cheapest such case. The cap goes last so a value straddling the cut is
+// already gone rather than sliced into a surviving prefix, and note that
+// SanitizeSingleLineBounded, the Capped pair, the Budgeted pair and Budget all
+// CONTAIN a cap and so delete bytes (Budget.Write caps BEFORE sanitizing),
+// which leaves a redaction placed after one of them matching against a needle
+// that cap may have split: redact before such a preset and again on its
+// output, or compose the primitives. The full consumer-side contract is
+// documented on httpx.RedactSecretString.
+//
 // The package is one deliberately small policy. It is not an HTML/XSS
 // sanitizer, does not normalize Unicode (NFC/NFKC), and does not touch
 // zero-width or confusable runes; context-aware sinks (Markdown cells,
