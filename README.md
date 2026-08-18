@@ -1,6 +1,6 @@
 # runesafe
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v2)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe/v2.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v2)
 [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod)
 [![Test coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/coverage.json)](https://github.com/cplieger/runesafe/actions/workflows/coverage.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13657/badge)](https://www.bestpractices.dev/projects/13657)
@@ -104,22 +104,23 @@ Separators go through `Write` too, so a hostile value **count** cannot grow the 
 
 ### Rune classification
 
-`IsUnsafe` exposes the policy rune-by-rune, with an explicit CR/LF switch:
+Two predicates expose the policy rune-by-rune, one per CR/LF policy, so a call
+site names its sink instead of passing a boolean:
 
 ```go
-runesafe.IsUnsafe('\x1b', true)  // true:  ESC is always unsafe
-runesafe.IsUnsafe('\n', true)    // false: the sink's encoder escapes it
-runesafe.IsUnsafe('\n', false)   // true:  single-line sink; a newline forges a record
+runesafe.IsUnsafeMultiLine('\x1b')  // true:  ESC is always unsafe
+runesafe.IsUnsafeMultiLine('\n')    // false: the sink's encoder escapes it
+runesafe.IsUnsafeSingleLine('\n')   // true:  single-line sink; a newline forges a record
 ```
 
 ### A custom replacement policy
 
-For a sink that needs a different replacement (strip instead of space), compose `IsUnsafe` yourself:
+For a sink that needs a different replacement (strip instead of space), compose the predicate for your sink:
 
 ```go
 // Remove (rather than blank) unsafe runes for a compact identifier.
 id = strings.Map(func(r rune) rune {
-    if runesafe.IsUnsafe(r, false) {
+    if runesafe.IsUnsafeSingleLine(r) {
         return -1
     }
     return r
