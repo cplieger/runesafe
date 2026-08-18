@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cplieger/runesafe"
+	"github.com/cplieger/runesafe/v2"
 )
 
 // TestSanitize pins the shared unsafe-rune policy for the slog/JSON sinks:
@@ -152,20 +152,20 @@ func TestCapBytes(t *testing.T) {
 // the other rune classes are unsafe under both policies.
 func TestIsUnsafeCRLFPolicy(t *testing.T) {
 	for _, r := range []rune{'\n', '\r'} {
-		if runesafe.IsUnsafe(r, true) {
+		if runesafe.IsUnsafeMultiLine(r) {
 			t.Errorf("IsUnsafe(%U, keepCRLF=true) = true, want false", r)
 		}
-		if !runesafe.IsUnsafe(r, false) {
+		if !runesafe.IsUnsafeSingleLine(r) {
 			t.Errorf("IsUnsafe(%U, keepCRLF=false) = false, want true", r)
 		}
 	}
 	for _, r := range []rune{0x00, 0x1b, '\t', 0x7f, '\u009b', '\u202e', '\u2028'} {
-		if !runesafe.IsUnsafe(r, true) || !runesafe.IsUnsafe(r, false) {
+		if !runesafe.IsUnsafeMultiLine(r) || !runesafe.IsUnsafeSingleLine(r) {
 			t.Errorf("IsUnsafe(%U) = false under a keepCRLF policy, want true under both", r)
 		}
 	}
 	for _, r := range []rune{'a', ' ', 'é', '葬'} {
-		if runesafe.IsUnsafe(r, true) || runesafe.IsUnsafe(r, false) {
+		if runesafe.IsUnsafeMultiLine(r) || runesafe.IsUnsafeSingleLine(r) {
 			t.Errorf("IsUnsafe(%U) = true, want false under both policies", r)
 		}
 	}
@@ -210,11 +210,11 @@ func TestClassifierUnicodeConformance(t *testing.T) {
 			t.Fatalf("IsBidiControl(%U) = %v, unicode.Bidi_Control says %v", r, got, bidi)
 		}
 		unsafeStrict := unicode.IsControl(r) || bidi || r == '\u2028' || r == '\u2029'
-		if got := runesafe.IsUnsafe(r, false); got != unsafeStrict {
+		if got := runesafe.IsUnsafeSingleLine(r); got != unsafeStrict {
 			t.Fatalf("IsUnsafe(%U, false) = %v, oracle says %v", r, got, unsafeStrict)
 		}
 		unsafeKeep := unsafeStrict && r != '\n' && r != '\r'
-		if got := runesafe.IsUnsafe(r, true); got != unsafeKeep {
+		if got := runesafe.IsUnsafeMultiLine(r); got != unsafeKeep {
 			t.Fatalf("IsUnsafe(%U, true) = %v, oracle says %v", r, got, unsafeKeep)
 		}
 		nonASCII := unsafeStrict && r > unicode.MaxASCII

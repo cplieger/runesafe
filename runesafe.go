@@ -19,26 +19,34 @@ func IsBidiControl(r rune) bool {
 		(r >= '\u2066' && r <= '\u2069')
 }
 
-// IsUnsafe reports whether r is unsafe in untrusted text bound for a log,
-// JSON, or rendered-output sink: a C0 control, DEL, a C1 control
-// (U+0080-U+009F, single-rune terminal-escape introducers), a Unicode bidi
-// control (IsBidiControl), or the U+2028/U+2029 line separators. keepCRLF
-// selects the CR/LF policy: true treats CR and LF as safe, for sinks whose
-// encoder escapes them (JSON); false treats them as unsafe like every other
-// C0 control, for single-line sinks where a raw newline forges a new record.
-// Sanitize and SanitizeSingleLine apply the two policies to whole strings.
-func IsUnsafe(r rune, keepCRLF bool) bool {
-	switch {
-	case r < 0x20:
-		return !keepCRLF || (r != '\n' && r != '\r')
-	case r == 0x7f:
-		return true
-	case r >= 0x80 && r <= 0x9f:
-		return true
-	case IsBidiControl(r) || r == '\u2028' || r == '\u2029':
-		return true
-	}
-	return false
+// IsUnsafeMultiLine reports whether r is unsafe in untrusted text bound for
+// a sink whose encoder escapes CR and LF itself (JSON, a quoting logger): a
+// C0 control other than CR/LF, DEL, a C1 control (U+0080-U+009F, single-rune
+// terminal-escape introducers), a Unicode bidi control (IsBidiControl), or
+// the U+2028/U+2029 line separators. CR and LF are SAFE under this policy.
+// It is the per-rune predicate behind [Sanitize]; the single-line policy is
+// [IsUnsafeSingleLine]. The v1 form IsUnsafe(r, keepCRLF) split into these
+// two names so the CR/LF policy is legible at the call site — and so that
+// mechanically deleting the bool cannot silently pick a policy: neither
+// replacement keeps the old name.
+func IsUnsafeMultiLine(r rune) bool {
+	return r != '\n' && r != '\r' && isUnsafeCore(r)
+}
+
+// IsUnsafeSingleLine reports whether r is unsafe in untrusted text bound for
+// a single-line sink, where a raw CR or LF forges a new record: everything
+// [IsUnsafeMultiLine] refuses, plus CR and LF. It is the per-rune predicate
+// behind [SanitizeSingleLine].
+func IsUnsafeSingleLine(r rune) bool {
+	return r == '\n' || r == '\r' || isUnsafeCore(r)
+}
+
+// isUnsafeCore is the CR/LF-independent shared policy: C0 controls (the
+// CR/LF decision is the callers'), DEL, C1 controls, bidi controls, and the
+// U+2028/U+2029 line separators.
+func isUnsafeCore(r rune) bool {
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) ||
+		IsBidiControl(r) || r == '\u2028' || r == '\u2029'
 }
 
 // IsUnsafeNonASCII reports whether r is an unsafe rune above the ASCII
@@ -49,10 +57,10 @@ func IsUnsafe(r rune, keepCRLF bool) bool {
 // C0, DEL, and whitespace itself, but url.Parse accepts these non-ASCII
 // runes raw, and a terminal or Markdown viewer must never receive them.
 // The CR/LF policy switch is moot above ASCII, so there is no keepCRLF
-// parameter: IsUnsafeNonASCII(r) equals IsUnsafe(r, keepCRLF) && r >
+// parameter: IsUnsafeNonASCII(r) equals IsUnsafeMultiLine(r) && r >
 // unicode.MaxASCII under either policy.
 func IsUnsafeNonASCII(r rune) bool {
-	return r > unicode.MaxASCII && IsUnsafe(r, true)
+	return r > unicode.MaxASCII && IsUnsafeMultiLine(r)
 }
 
 // Sanitize makes an untrusted string safe for slog/JSON sinks by replacing
@@ -66,7 +74,7 @@ func IsUnsafeNonASCII(r rune) bool {
 // sinks, so they cannot drift. For a single-line sink where CR/LF must also
 // go, use SanitizeSingleLine.
 func Sanitize(s string) string {
-	return sanitize(s, true)
+	return strings.Map(mapMultiLine, s)
 }
 
 // SanitizeSingleLine makes an untrusted string safe for a single-line sink —
@@ -76,7 +84,7 @@ func Sanitize(s string) string {
 // in a single-line sink forges a record boundary. Invalid UTF-8 bytes become
 // U+FFFD, so the result is always valid UTF-8 and carries no line break.
 func SanitizeSingleLine(s string) string {
-	return sanitize(s, false)
+	return strings.Map(mapSingleLine, s)
 }
 
 // SanitizeCapped is Sanitize followed by a byte cap that INCLUDES the
@@ -116,8 +124,10 @@ func SanitizeSingleLine(s string) string {
 // The CR/LF policy is a second function rather than a parameter on this one,
 // deliberately: the package already expresses that choice as the named
 // Sanitize / SanitizeSingleLine pair, so a call site names its sink instead
-// of passing an opaque boolean next to two other tuning arguments. Only
-// IsUnsafe takes the flag, because a composed policy needs it as data.
+// of passing an opaque boolean next to two other tuning arguments. The
+// per-rune predicates follow the same rule since v2: IsUnsafeMultiLine and
+// IsUnsafeSingleLine are named for their policy, and a composed policy takes
+// whichever predicate is its data.
 // SanitizeSingleLineCapped is the strict twin.
 //
 // Two consumer shapes this pair deliberately does NOT serve, and must not be
@@ -193,7 +203,7 @@ func SanitizeSingleLineBounded(s string, n int) string {
 	// Budget engine hold in common; what is left is a short composition of the
 	// package's own primitives. The empty-input guard is what keeps "" empty
 	// under a non-positive cap instead of marking it.
-	clean := sanitize(s, false)
+	clean := strings.Map(mapSingleLine, s)
 	if clean == "" || len(clean) <= n {
 		return clean
 	}
@@ -204,16 +214,24 @@ func SanitizeSingleLineBounded(s string, n int) string {
 // The Capped pair takes the marker from the caller instead.
 const defaultMarker = "..."
 
-// sanitize applies the IsUnsafe policy to every rune of s, replacing each
-// unsafe rune with a space via strings.Map (which also converts each invalid
-// UTF-8 byte to U+FFFD, a safe rune under both policies).
-func sanitize(s string, keepCRLF bool) string {
-	return strings.Map(func(r rune) rune {
-		if IsUnsafe(r, keepCRLF) {
-			return ' '
-		}
-		return r
-	}, s)
+// mapMultiLine and mapSingleLine are the named strings.Map functions behind
+// Sanitize and SanitizeSingleLine: each replaces an unsafe rune with a space
+// (strings.Map also converts each invalid UTF-8 byte to U+FFFD, a safe rune
+// under both policies). Named package-level functions rather than closures
+// over a predicate parameter so the per-rune call stays direct and inlinable
+// — the closure form measured +25% on Sanitize.
+func mapMultiLine(r rune) rune {
+	if IsUnsafeMultiLine(r) {
+		return ' '
+	}
+	return r
+}
+
+func mapSingleLine(r rune) rune {
+	if IsUnsafeSingleLine(r) {
+		return ' '
+	}
+	return r
 }
 
 // CapBytes truncates s to at most n bytes without splitting a multi-byte

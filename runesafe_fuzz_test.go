@@ -7,7 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cplieger/runesafe"
+	"github.com/cplieger/runesafe/v2"
 )
 
 // fuzzSeeds is the adversarial corpus for the sanitizers: terminal escape
@@ -50,12 +50,12 @@ func FuzzSanitizeSafeIdempotent(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, in string) {
 		presets := []struct {
-			name     string
-			fn       func(string) string
-			keepCRLF bool
+			name   string
+			fn     func(string) string
+			unsafe func(rune) bool
 		}{
-			{"Sanitize", runesafe.Sanitize, true},
-			{"SanitizeSingleLine", runesafe.SanitizeSingleLine, false},
+			{"Sanitize", runesafe.Sanitize, runesafe.IsUnsafeMultiLine},
+			{"SanitizeSingleLine", runesafe.SanitizeSingleLine, runesafe.IsUnsafeSingleLine},
 		}
 		for _, p := range presets {
 			out := p.fn(in)
@@ -63,7 +63,7 @@ func FuzzSanitizeSafeIdempotent(f *testing.F) {
 				t.Errorf("%s(%q) = %q, not valid UTF-8", p.name, in, out)
 			}
 			for _, r := range out {
-				if runesafe.IsUnsafe(r, p.keepCRLF) {
+				if p.unsafe(r) {
 					t.Errorf("%s(%q) = %q still carries unsafe rune %U", p.name, in, out, r)
 				}
 			}
@@ -72,7 +72,7 @@ func FuzzSanitizeSafeIdempotent(f *testing.F) {
 			}
 			var b strings.Builder
 			for _, r := range in {
-				if runesafe.IsUnsafe(r, p.keepCRLF) {
+				if p.unsafe(r) {
 					b.WriteRune(' ')
 				} else {
 					b.WriteRune(r)
@@ -109,7 +109,7 @@ func FuzzIsUnsafePolicyConsistency(f *testing.F) {
 		f.Add(r)
 	}
 	f.Fuzz(func(t *testing.T, r rune) {
-		keep, strict := runesafe.IsUnsafe(r, true), runesafe.IsUnsafe(r, false)
+		keep, strict := runesafe.IsUnsafeMultiLine(r), runesafe.IsUnsafeSingleLine(r)
 		if runesafe.IsBidiControl(r) && (!keep || !strict) {
 			t.Errorf("IsBidiControl(%U) is true but IsUnsafe = (keepCRLF %v, strict %v), want unsafe under both", r, keep, strict)
 		}
@@ -254,7 +254,7 @@ func FuzzSanitizeSingleLineBounded(f *testing.F) {
 			t.Fatalf("invalid UTF-8 output: %q", got)
 		}
 		for _, r := range got {
-			if runesafe.IsUnsafe(r, false) {
+			if runesafe.IsUnsafeSingleLine(r) {
 				t.Fatalf("unsafe rune %U survived: %q", r, got)
 			}
 		}
@@ -303,13 +303,13 @@ func FuzzSanitizeCapped(f *testing.F) {
 	f.Add("", 4, "…")
 	f.Fuzz(func(t *testing.T, s string, n int, marker string) {
 		variants := []struct {
-			name     string
-			fn       func(string, int, string) (string, bool)
-			full     string
-			keepCRLF bool
+			name   string
+			fn     func(string, int, string) (string, bool)
+			full   string
+			unsafe func(rune) bool
 		}{
-			{"SanitizeCapped", runesafe.SanitizeCapped, runesafe.Sanitize(s), true},
-			{"SanitizeSingleLineCapped", runesafe.SanitizeSingleLineCapped, runesafe.SanitizeSingleLine(s), false},
+			{"SanitizeCapped", runesafe.SanitizeCapped, runesafe.Sanitize(s), runesafe.IsUnsafeMultiLine},
+			{"SanitizeSingleLineCapped", runesafe.SanitizeSingleLineCapped, runesafe.SanitizeSingleLine(s), runesafe.IsUnsafeSingleLine},
 		}
 		for _, v := range variants {
 			out, cut := v.fn(s, n, marker)
@@ -337,7 +337,7 @@ func FuzzSanitizeCapped(f *testing.F) {
 				t.Fatalf("%s(%q, %d, %q) = %q: body %q is not valid UTF-8", v.name, s, n, marker, out, body)
 			}
 			for _, r := range body {
-				if runesafe.IsUnsafe(r, v.keepCRLF) {
+				if v.unsafe(r) {
 					t.Fatalf("%s(%q, %d, %q) = %q: unsafe rune %U survived in the body", v.name, s, n, marker, out, r)
 				}
 			}
@@ -380,10 +380,10 @@ func FuzzBudget(f *testing.F) {
 			fn        func(string, int, string) (string, bool)
 			newBudget func(int, string) *runesafe.Budget
 			sanitize  func(string) string
-			keepCRLF  bool
+			unsafe    func(rune) bool
 		}{
-			{"SanitizeBudgeted", runesafe.SanitizeBudgeted, runesafe.NewBudget, runesafe.Sanitize, true},
-			{"SanitizeSingleLineBudgeted", runesafe.SanitizeSingleLineBudgeted, runesafe.NewSingleLineBudget, runesafe.SanitizeSingleLine, false},
+			{"SanitizeBudgeted", runesafe.SanitizeBudgeted, runesafe.NewBudget, runesafe.Sanitize, runesafe.IsUnsafeMultiLine},
+			{"SanitizeSingleLineBudgeted", runesafe.SanitizeSingleLineBudgeted, runesafe.NewSingleLineBudget, runesafe.SanitizeSingleLine, runesafe.IsUnsafeSingleLine},
 		}
 		bound := max(n, 0)
 		for _, v := range variants {
@@ -413,7 +413,7 @@ func FuzzBudget(f *testing.F) {
 				t.Fatalf("%s(%q, %d, %q) = %q: body %q is not valid UTF-8", v.name, s, n, marker, out, body)
 			}
 			for _, r := range body {
-				if runesafe.IsUnsafe(r, v.keepCRLF) {
+				if v.unsafe(r) {
 					t.Fatalf("%s(%q, %d, %q) = %q: unsafe rune %U survived in the body", v.name, s, n, marker, out, r)
 				}
 			}

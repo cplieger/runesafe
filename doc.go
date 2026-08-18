@@ -15,7 +15,7 @@
 //     forgery (a raw newline splits one record into two, letting upstream
 //     text fabricate a whole log line). JSON encoders escape C0, so CR and
 //     LF may be kept for sinks whose encoder provably escapes them (the
-//     keepCRLF policy switch).
+//     CR/LF policy split: IsUnsafeMultiLine vs IsUnsafeSingleLine).
 //   - C1 controls (U+0080-U+009F): single-rune escape introducers (CSI
 //     U+009B, OSC U+009D, ...) with the same terminal powers as ESC
 //     sequences. encoding/json and slog's JSONHandler emit them raw, so
@@ -37,7 +37,7 @@
 // construction-time sanitization remains the boundary for text that must
 // be safe unconditionally through every future sink.
 //
-// IsUnsafe classifies one rune under an explicit CR/LF policy,
+// IsUnsafeMultiLine and IsUnsafeSingleLine classify one rune per policy,
 // IsUnsafeNonASCII exposes the above-ASCII subset (C1, bidi controls, the
 // separators) for escapers whose sink already covers ASCII, and
 // IsBidiControl exposes the Bidi_Control subset. Sanitize (CR/LF kept, for

@@ -41,15 +41,15 @@ import "strings"
 // treat every write as a cut. A Budget must not be copied after its first
 // write, and it is not safe for concurrent use.
 type Budget struct {
+	unsafe    func(rune) bool
 	marker    string
 	b         strings.Builder
 	total     int
 	remaining int
-	keepCRLF  bool
 	cut       bool
 }
 
-// NewBudget returns a Budget of n bytes under the keepCRLF=true policy — CR and
+// NewBudget returns a Budget of n bytes under the multi-line policy ([IsUnsafeMultiLine]) — CR and
 // LF survive, for a sink whose encoder escapes them (JSON, slog's handlers) —
 // appending marker to the aggregate when anything was cut. It is the
 // Sanitize / SanitizeCapped policy in aggregate form;
@@ -64,11 +64,11 @@ type Budget struct {
 // caller first. An empty marker is legal and yields a silent cap with the fact
 // still returned by Result.
 func NewBudget(n int, marker string) *Budget {
-	return &Budget{marker: marker, total: n, remaining: n, keepCRLF: true}
+	return &Budget{marker: marker, total: n, remaining: n, unsafe: IsUnsafeMultiLine}
 }
 
 // NewSingleLineBudget returns a Budget of n bytes under the strict
-// keepCRLF=false policy: CR and LF become spaces along with every other unsafe
+// single-line policy ([IsUnsafeSingleLine]): CR and LF become spaces along with every other unsafe
 // rune, for a single-line sink where a raw newline forges a record boundary — a
 // plain-text log line, a one-line error message, a rendered table cell. The
 // budget, marker and cut contract are identical to NewBudget's; the CR/LF
@@ -76,7 +76,7 @@ func NewBudget(n int, marker string) *Budget {
 // SanitizeSingleLineCapped is a second function, so a call site names its sink
 // instead of passing an opaque boolean.
 func NewSingleLineBudget(n int, marker string) *Budget {
-	return &Budget{marker: marker, total: n, remaining: n}
+	return &Budget{marker: marker, total: n, remaining: n, unsafe: IsUnsafeSingleLine}
 }
 
 // Write appends the sanitized prefix of raw that still fits the remaining
@@ -116,7 +116,12 @@ func (b *Budget) Write(raw string) bool {
 	if len(chunk) < len(raw) {
 		b.cut = true
 	}
-	clean := sanitize(chunk, b.keepCRLF)
+	clean := strings.Map(func(r rune) rune {
+		if b.unsafe(r) {
+			return ' '
+		}
+		return r
+	}, chunk)
 	if len(clean) > b.remaining {
 		clean = CapBytes(clean, b.remaining)
 		b.cut = true
@@ -156,7 +161,7 @@ func (b *Budget) Result() (text string, cut bool) {
 // SanitizeBudgeted is the one-value form of NewBudget: a Budget of n bytes, one
 // Write of s, and its Result. It is SanitizeCapped with the cap moved AHEAD of
 // the sanitizer — s is capped on a rune boundary at n bytes first, the chunk is
-// sanitized under the keepCRLF=true policy, sanitization growth is re-capped,
+// sanitized under the multi-line policy, sanitization growth is re-capped,
 // and the caller's marker is charged inside n — so the budget bounds the WORK
 // done on s rather than only the size of what comes back. Reach for it when s
 // comes from an upstream whose size the caller does not control (a response
@@ -185,7 +190,7 @@ func SanitizeBudgeted(s string, n int, marker string) (text string, cut bool) {
 }
 
 // SanitizeSingleLineBudgeted is SanitizeBudgeted under the strict
-// keepCRLF=false policy: CR and LF become spaces along with every other unsafe
+// single-line policy: CR and LF become spaces along with every other unsafe
 // rune, for a single-line sink where a raw newline forges a record boundary.
 // The pre-cap, re-cap, marker and cut contract are identical; see
 // SanitizeBudgeted for the full contract and for the one input class on which
