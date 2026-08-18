@@ -52,7 +52,7 @@ func TestSanitize(t *testing.T) {
 	}
 }
 
-// TestSanitizeSingleLine pins the strict keepCRLF=false preset: CR and LF
+// TestSanitizeSingleLine pins the strict single-line preset: CR and LF
 // become spaces like every other C0 control, the other rune classes match
 // Sanitize, and safe text passes through unchanged.
 func TestSanitizeSingleLine(t *testing.T) {
@@ -146,27 +146,28 @@ func TestCapBytes(t *testing.T) {
 	}
 }
 
-// TestIsUnsafeCRLFPolicy pins the keepCRLF switch: CR and LF are safe only
-// when the sink's encoder escapes them (keepCRLF true); a single-line sink
-// (keepCRLF false) treats them as unsafe like every other C0 control, and
-// the other rune classes are unsafe under both policies.
+// TestIsUnsafeCRLFPolicy pins the CR/LF split across the two predicates: CR
+// and LF are safe only for a sink whose encoder escapes them
+// ([runesafe.IsUnsafeMultiLine]); a single-line sink
+// ([runesafe.IsUnsafeSingleLine]) treats them as unsafe like every other C0
+// control, and the other rune classes are unsafe under both policies.
 func TestIsUnsafeCRLFPolicy(t *testing.T) {
 	for _, r := range []rune{'\n', '\r'} {
 		if runesafe.IsUnsafeMultiLine(r) {
-			t.Errorf("IsUnsafe(%U, keepCRLF=true) = true, want false", r)
+			t.Errorf("IsUnsafeMultiLine(%U) = true, want false", r)
 		}
 		if !runesafe.IsUnsafeSingleLine(r) {
-			t.Errorf("IsUnsafe(%U, keepCRLF=false) = false, want true", r)
+			t.Errorf("IsUnsafeSingleLine(%U) = false, want true", r)
 		}
 	}
 	for _, r := range []rune{0x00, 0x1b, '\t', 0x7f, '\u009b', '\u202e', '\u2028'} {
 		if !runesafe.IsUnsafeMultiLine(r) || !runesafe.IsUnsafeSingleLine(r) {
-			t.Errorf("IsUnsafe(%U) = false under a keepCRLF policy, want true under both", r)
+			t.Errorf("IsUnsafeMultiLine(%U) or IsUnsafeSingleLine(%U) = false, want true under both policies", r, r)
 		}
 	}
 	for _, r := range []rune{'a', ' ', 'é', '葬'} {
 		if runesafe.IsUnsafeMultiLine(r) || runesafe.IsUnsafeSingleLine(r) {
-			t.Errorf("IsUnsafe(%U) = true, want false under both policies", r)
+			t.Errorf("IsUnsafeMultiLine(%U) or IsUnsafeSingleLine(%U) = true, want false under both policies", r, r)
 		}
 	}
 }
