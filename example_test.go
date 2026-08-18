@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cplieger/runesafe"
+	"github.com/cplieger/runesafe/v2"
 )
 
 // ExampleSanitize sanitizes an upstream-controlled title before it becomes
@@ -35,11 +35,11 @@ func ExampleCapBytes() {
 	// Output: "葬送"
 }
 
-// ExampleIsUnsafe shows the CR/LF policy switch: a newline is safe for a
-// JSON sink whose encoder escapes it, and unsafe for a single-line sink.
-func ExampleIsUnsafe() {
-	fmt.Println(runesafe.IsUnsafe('\n', true), runesafe.IsUnsafe('\n', false))
-	fmt.Println(runesafe.IsUnsafe('\u009b', true), runesafe.IsUnsafe('\u009b', false))
+// ExampleIsUnsafeMultiLine shows the CR/LF policy split: a newline is safe
+// for a sink whose encoder escapes it, and unsafe for a single-line sink.
+func ExampleIsUnsafeMultiLine() {
+	fmt.Println(runesafe.IsUnsafeMultiLine('\n'), runesafe.IsUnsafeSingleLine('\n'))
+	fmt.Println(runesafe.IsUnsafeMultiLine('\u009b'), runesafe.IsUnsafeSingleLine('\u009b'))
 	// Output:
 	// false true
 	// true true

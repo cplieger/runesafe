@@ -1,6 +1,6 @@
 # runesafe
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe.svg)](https://pkg.go.dev/github.com/cplieger/runesafe)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v2)
 [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod)
 [![Test coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/coverage.json)](https://github.com/cplieger/runesafe/actions/workflows/coverage.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/13657/badge)](https://www.bestpractices.dev/projects/13657)
@@ -22,7 +22,7 @@ Standard library only, zero dependencies.
 ## Install
 
 ```sh
-go get github.com/cplieger/runesafe@latest
+go get github.com/cplieger/runesafe/v2@latest
 ```
 
 ## Usage
@@ -168,12 +168,20 @@ if ep.Title.Raw() == onDisk.Title.Raw() { /* matching stays raw */ }
 
 Two rules keep it honest. Structs persisted for the program's own re-reading store `Raw()` in plain `string` fields: `MarshalText` fires inside every `json.Marshal`, so a tagged field in a state file would round-trip sanitized, not raw. And a `string(v)` conversion silently drops the tag; use `Raw()` so intentional unwrapping stays greppable.
 
+## Migrating from v1
+
+| v1 | v2 |
+| --- | --- |
+| `IsUnsafe(r, true)` | `IsUnsafeMultiLine(r)` |
+| `IsUnsafe(r, false)` | `IsUnsafeSingleLine(r)` |
+| `github.com/cplieger/runesafe` | `github.com/cplieger/runesafe/v2` |
+
 ## API
 
 | Symbol | Contract |
 | --- | --- |
-| `Sanitize(s string) string` | Replaces each unsafe rune (keepCRLF=true policy) with a space. Valid UTF-8 out, rune count preserved, idempotent. |
-| `SanitizeSingleLine(s string) string` | The strict preset (keepCRLF=false): everything `Sanitize` replaces, plus CR and LF. |
+| `Sanitize(s string) string` | Replaces each unsafe rune (multi-line policy, `IsUnsafeMultiLine`) with a space. Valid UTF-8 out, rune count preserved, idempotent. |
+| `SanitizeSingleLine(s string) string` | The strict preset (`IsUnsafeSingleLine`): everything `Sanitize` replaces, plus CR and LF. |
 | `SanitizeSingleLineBounded(s string, n int) string` | `SanitizeSingleLine`, then a rune-boundary cap of the sanitized form at n bytes with `"..."` appended outside the cap (truncated result ≤ n+3 bytes; within-cap input byte-identical, no marker). Non-positive n yields `"..."` for non-empty input; `""` stays `""`. |
 | `SanitizeCapped(s string, n int, marker string) (text string, cut bool)` | `Sanitize`, then a rune-boundary cap with the caller's marker counted **inside** the cap: the text is always ≤ max(n, 0) bytes. `cut` is true exactly when the sanitized form was shortened. A cap below `len(marker)` drops the marker; the marker is emitted verbatim, never sanitized. |
 | `SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut bool)` | The strict twin of `SanitizeCapped` (CR and LF replaced too), same cap, marker and `cut` contract. |
@@ -183,7 +191,8 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `(*Budget).Write(raw string) bool` | Append `raw`'s sanitized, pre-capped prefix against the remaining budget. Reports whether the aggregate is still whole — deliberately not "the budget has room", so a caller loops until a write is actually refused. Separators go through it too. |
 | `(*Budget).Result() (text string, cut bool)` | The aggregate and the ONE truncation fact latched across every write, marked once and never longer than max(n, 0) bytes. Reads without spending; calling it twice returns the same pair. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
-| `IsUnsafe(r rune, keepCRLF bool) bool` | One rune under the policy: C0 (CR/LF exempt when keepCRLF), DEL, C1, Bidi_Control, U+2028/U+2029. |
+| `IsUnsafeMultiLine(r rune) bool` | One rune under the multi-line policy: C0 except CR/LF, DEL, C1, Bidi_Control, U+2028/U+2029. |
+| `IsUnsafeSingleLine(r rune) bool` | The strict per-rune policy: everything `IsUnsafeMultiLine` refuses, plus CR and LF. The v1 `IsUnsafe(r, keepCRLF)` split into these two names so a call site reads its policy — and so deleting the bool cannot silently pick one. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
 | `IsBidiControl(r rune) bool` | Exactly `unicode.Is(unicode.Bidi_Control, r)`, without the table lookup. |
 | `Untrusted` (string type) | Provenance tag for upstream text: decodes raw, emits `Sanitize`'d through `slog.LogValuer`, `fmt.Stringer`, and `encoding.TextMarshaler`. |
