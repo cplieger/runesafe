@@ -12,7 +12,9 @@ import (
 // isolate range U+2066-U+2069 (LRI/RLI/FSI/PDI). Any of them in untrusted
 // text can visually reorder rendered output (Trojan-Source-style report and
 // link spoofing), so every output sanitizer treats the full set as unsafe.
-// The set matches unicode.Bidi_Control exactly, without the table lookup.
+// The set matches unicode.Bidi_Control exactly, without the table lookup; a
+// conformance sweep pins the two rune by rune, so a later Unicode adding a
+// member fails the tests instead of silently diverging.
 func IsBidiControl(r rune) bool {
 	return r == '\u061c' || r == '\u200e' || r == '\u200f' ||
 		(r >= '\u202a' && r <= '\u202e') ||

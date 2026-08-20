@@ -12,10 +12,12 @@ A standalone Go library for a boundary every scraper-adjacent app meets: text th
 
 - **C0 controls (U+0000–U+001F) and DEL (U+007F)**: terminal escape sequences and log-record forgery. ESC introduces CSI/OSC sequences that can retitle the terminal, clear the screen, or write to the clipboard; a raw newline splits one record into two, fabricating a whole log line. CR/LF are optionally kept for sinks whose encoder escapes them (JSON).
 - **C1 controls (U+0080–U+009F)**: single-rune escape introducers (CSI U+009B, OSC U+009D, …) with the same terminal powers as ESC sequences. `encoding/json` and slog's `JSONHandler` emit them **raw**, so escaping C0 alone does not close the terminal-injection hole.
-- **Unicode Bidi_Control format characters** (U+061C, U+200E/U+200F, U+202A–U+202E, U+2066–U+2069): visually reorder rendered text, Trojan-Source-style, so a link or verdict reads differently than it compares. The set matches `unicode.Bidi_Control` exactly.
+- **Unicode Bidi_Control format characters** (U+061C, U+200E/U+200F, U+202A–U+202E, U+2066–U+2069): visually reorder rendered text, Trojan-Source-style, so a link or verdict reads differently than it compares. The set matches `unicode.Bidi_Control` exactly, pinned rune by rune against that table by the package's conformance sweep.
 - **Line and paragraph separators U+2028/U+2029**: legal unescaped in JSON but line terminators to JavaScript and many viewers, so they split records like a raw newline.
 
 runesafe classifies these runes and provides the shared sanitizers, so an app's slog emitter, JSON report writer, and renderer apply an identical policy instead of three drifting hand-rolled ones.
+
+The four classes are enumerated as code points, never looked up in a Unicode table, so a Unicode upgrade cannot move the policy: measured over all 1,114,112 code points, every predicate and both sanitizers answer identically on Go 1.26.7 (Unicode 15.0.0) and Go 1.27.0 (Unicode 17.0.0). The tables are consulted only by the tests, as an independent oracle, and each class's size is pinned so mirroring a future Unicode addition has to be deliberate.
 
 Standard library only, zero dependencies.
 
@@ -212,6 +214,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | --- | --- |
 | HTML/XSS sanitization | Different threat model and sink; use a real HTML sanitizer. This policy is for logs, JSON, and rendered reports. |
 | Unicode normalization (NFC/NFKC) | Normalization changes text identity; a display-safety policy must not. Normalize separately if the app needs it. |
+| Case folding and case mapping | Folding is not identity (U+212A folds to ASCII `K`) and its answers move with the toolchain's Unicode tables; a display-safety policy must not decide what two strings mean. Match on raw bytes, or canonicalize explicitly. |
 | Zero-width and confusable runes | Invisible-character and homoglyph spoofing is a rabbit hole with legitimate-text collateral (ZWJ in emoji, real Cyrillic). The policy targets runes with control semantics, where replacement is always correct. |
 | Configurable replacement rune | The space is the policy; a different replacement is a two-line `strings.Map` over `IsUnsafe` (shown above). |
 | Removing instead of replacing | Deletion changes rune offsets and can splice adjacent fragments into new tokens; 1:1 replacement preserves shape. Compose `IsUnsafe` for the rare sink that genuinely wants removal. |

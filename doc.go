@@ -28,6 +28,21 @@
 //     JSON but line terminators to JavaScript and many viewers, so they
 //     split records like a raw newline.
 //
+// The four classes are enumerated as CODE POINTS, never looked up in a Unicode
+// table, so a Unicode upgrade cannot move the policy. Measured rune by rune
+// over all 1,114,112 code points: every predicate and both sanitizers return
+// identical answers on Go 1.26.7 (Unicode 15.0.0) and Go 1.27.0 (Unicode
+// 17.0.0), whose 10,615 newly assigned runes are all graphic — not one is a
+// Cc, Cf, Bidi_Control or separator, so not one joins an unsafe class. The
+// tables are still consulted, but only by the tests, as an independent oracle:
+// they fail if a future Unicode adds a member to a class enumerated here, and
+// each class's size is pinned so mirroring such an addition has to be
+// deliberate. What a Unicode upgrade does move is how a SINK renders this
+// package's output: slog's TextHandler decides whether to quote an attribute
+// via unicode.IsPrint, so a rune newly assigned in Unicode 17 that it escaped
+// as \Uxxxxxxxx under Unicode 15 now appears literally. That is an encoder's
+// choice about a graphic rune, not a change in what this package replaces.
+//
 // The Untrusted string type makes the policy travel with the value: tag an
 // upstream field at its decode struct and every standard sink applies
 // Sanitize automatically — slog via LogValuer, fmt and error construction
@@ -88,7 +103,8 @@
 // documented on httpx.RedactSecretString.
 //
 // The package is one deliberately small policy. It is not an HTML/XSS
-// sanitizer, does not normalize Unicode (NFC/NFKC), and does not touch
-// zero-width or confusable runes; context-aware sinks (Markdown cells,
-// URLs, HTML) need their own escaping on top of this rune policy.
+// sanitizer, does not normalize Unicode (NFC/NFKC), case-folds and case-maps
+// nothing, and does not touch zero-width or confusable runes; context-aware
+// sinks (Markdown cells, URLs, HTML) need their own escaping on top of this
+// rune policy.
 package runesafe

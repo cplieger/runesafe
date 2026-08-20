@@ -113,6 +113,18 @@ func (u Untrusted) SingleLine() string {
 // three-byte U+FFFD), so a cap applied to Raw does not survive emission.
 // Prefer Raw over a string conversion so intentional unwrapping stays
 // greppable.
+//
+// Matching on Raw is BYTE equality, and that is the contract: two values
+// differing only in an unsafe rune stay distinct. Do not substitute
+// strings.EqualFold to turn such a comparison into an identity check on
+// untrusted text. A fold is not an identity — U+212A folds to ASCII K, so a
+// fold-equal test accepts a non-ASCII string as an ASCII one — and its answers
+// move with the toolchain: Go 1.27's Unicode 17 folds U+0390/U+1FD3,
+// U+03B0/U+1FE3 and U+FB05/U+FB06 together where Go 1.26 kept them distinct,
+// while strings.ToLower maps all six to themselves on both, so the two
+// comparisons do not even agree with each other. Case-insensitive matching that
+// must stay stable belongs on an ASCII-only fold, or on ToLower as an explicit
+// canonicalization whose result is the key.
 func (u Untrusted) Raw() string {
 	return string(u)
 }
