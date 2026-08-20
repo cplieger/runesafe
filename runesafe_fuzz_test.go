@@ -32,6 +32,19 @@ var fuzzSeeds = []string{
 	"\xe8\x91",
 	"\xed\xa0\x80",
 	" \t\n\r",
+	// One seed per Unicode class that MOVED between Go 1.26.7's Unicode 15 and
+	// Go 1.27.0's Unicode 17. None of these runes is in any of the four unsafe
+	// classes on either side, which is the point: the committed corpus is what
+	// the weekly fuzz re-explores from and it held none of them, so the claim
+	// that the policy is Unicode-version-independent went unprobed at exactly
+	// the code points that changed. Each pairs its delta rune with an unsafe
+	// one so the sanitizer has work to do at a multi-byte boundary.
+	"\u202e\u0390\u1fd3\u03b0\u1fe3\ufb05\ufb06\u009b", // the three pairs SimpleFold now folds together
+	"\u0130\u212aKi\u009b",                             // the only two non-ASCII runes that lower to ASCII
+	"a\U0001171e\u202eb",                               // U+1171E: Mn -> Mc, the matrix's one category removal
+	"\u0295\u1c89\u1c8a\u009b",                         // U+0295: Ll -> Lo, beside the cased pair added in its place
+	"\U000105c0\U00010d40\U0001e5d0\u2028",             // assigned in 16/17, unassigned (Cn) in 15
+	"\u019b\u0264\ua7d3\ua7d5\u202e",                   // gained an uppercase mapping in 17
 }
 
 // FuzzSanitizeSafeIdempotent drives both sanitizer presets with arbitrary
@@ -105,6 +118,13 @@ func FuzzIsUnsafePolicyConsistency(f *testing.F) {
 		0, '\n', '\r', 0x1b, 0x1f, ' ', '~', 0x7f, 0x80, 0x9b, 0x9f, 0xa0,
 		'\u061c', '\u200e', '\u2027', '\u2028', '\u2029', '\u202a', '\u202e',
 		'\u2066', '\u2069', 'a', '葬', unicode.MaxRune, -1,
+		// The Unicode 17 delta, rune by rune: the three now-folding pairs, the
+		// two runes that lower to ASCII, the Mn -> Mc and Ll -> Lo category
+		// moves, and two runes that were unassigned in Unicode 15. The
+		// classifier must answer identically on both sides of that bump.
+		'\u0390', '\u1fd3', '\u03b0', '\u1fe3', '\ufb05', '\ufb06',
+		'\u0130', '\u212a', '\U0001171e', '\u0295', '\u1c89',
+		'\U000105c0', '\U0001e5d0',
 	} {
 		f.Add(r)
 	}

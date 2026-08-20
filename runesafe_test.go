@@ -229,6 +229,51 @@ func TestClassifierUnicodeConformance(t *testing.T) {
 	}
 }
 
+// TestPolicyCardinalityPinned fixes the SIZE of each rune class, which the
+// conformance sweep above deliberately cannot: that sweep compares the
+// hardcoded ranges against the toolchain's own tables, so a Unicode release
+// that adds a Bidi_Control or a Cc — together with an edit here mirroring it —
+// would keep the sweep green while silently widening what every consumer's
+// sinks replace. These four counts make that a reviewed change instead.
+//
+// Measured identical on go1.26.7 (Unicode 15.0.0) and go1.27.0 (Unicode
+// 17.0.0), because the policy is pinned to code points rather than to table
+// lookups: Cc(65) + Bidi_Control(12) + U+2028/U+2029 = 79 under the
+// single-line policy, minus CR and LF = 77 under the multi-line one, and
+// C1(32) + Bidi_Control(12) + the two separators = 46 above ASCII.
+func TestPolicyCardinalityPinned(t *testing.T) {
+	var bidi, single, multi, nonASCII int
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if runesafe.IsBidiControl(r) {
+			bidi++
+		}
+		if runesafe.IsUnsafeSingleLine(r) {
+			single++
+		}
+		if runesafe.IsUnsafeMultiLine(r) {
+			multi++
+		}
+		if runesafe.IsUnsafeNonASCII(r) {
+			nonASCII++
+		}
+	}
+	for _, c := range []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"IsBidiControl", bidi, 12},
+		{"IsUnsafeSingleLine", single, 79},
+		{"IsUnsafeMultiLine", multi, 77},
+		{"IsUnsafeNonASCII", nonASCII, 46},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s classifies %d runes, want %d; the policy's size changed under Unicode %s -- widen or narrow this pin only with the change reviewed",
+				c.name, c.got, c.want, unicode.Version)
+		}
+	}
+}
+
 // TestIsUnsafeNonASCII pins the above-ASCII subset predicate: C1 controls,
 // the Bidi_Control set, and the U+2028/U+2029 separators are flagged, while
 // every ASCII rune — including the C0 controls, CR/LF, and DEL that IsUnsafe
