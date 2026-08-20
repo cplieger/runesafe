@@ -178,6 +178,8 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `IsUnsafe(r, true)` | `IsUnsafeMultiLine(r)` |
 | `IsUnsafe(r, false)` | `IsUnsafeSingleLine(r)` |
 | `github.com/cplieger/runesafe` | `github.com/cplieger/runesafe/v2` |
+| a `map[Untrusted]V` key marshaled raw | the key marshals sanitized, like every other tagged value |
+| Go 1.26.7 | Go 1.27.0, the toolchain whose `encoding/json` routes a map key through `MarshalText` |
 
 ## API
 
@@ -195,7 +197,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `(*Budget).Result() (text string, cut bool)` | The aggregate and the ONE truncation fact latched across every write, marked once and never longer than max(n, 0) bytes. Reads without spending; calling it twice returns the same pair. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
 | `IsUnsafeMultiLine(r rune) bool` | One rune under the multi-line policy: C0 except CR/LF, DEL, C1, Bidi_Control, U+2028/U+2029. |
-| `IsUnsafeSingleLine(r rune) bool` | The strict per-rune policy: everything `IsUnsafeMultiLine` refuses, plus CR and LF. The v1 `IsUnsafe(r, keepCRLF)` split into these two names so a call site reads its policy — and so deleting the bool cannot silently pick one. |
+| `IsUnsafeSingleLine(r rune) bool` | The strict per-rune policy: everything `IsUnsafeMultiLine` refuses, plus CR and LF. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |
 | `IsBidiControl(r rune) bool` | Exactly `unicode.Is(unicode.Bidi_Control, r)`, without the table lookup. |
 | `Untrusted` (string type) | Provenance tag for upstream text: decodes raw, emits `Sanitize`'d through `slog.LogValuer`, `fmt.Stringer`, and `encoding.TextMarshaler`. |
@@ -204,7 +206,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 
 ## Adoption guidance
 
-- **One policy per app.** Route every untrusted attribute through `Sanitize` / `SanitizeSingleLine` (or one app-local wrapper around `IsUnsafe`) so two sinks cannot disagree about what is dangerous.
+- **One policy per app.** Route every untrusted attribute through `Sanitize` / `SanitizeSingleLine` (or one app-local wrapper around `IsUnsafeMultiLine` / `IsUnsafeSingleLine`) so two sinks cannot disagree about what is dangerous.
 - **Construction-time sanitization still has a place.** For text that must be safe unconditionally through every future sink, like a captured error body, sanitize at construction instead of tagging.
 - **Context-aware sinks still need their own escaping.** A Markdown table cell, a link URL, or an HTML page has injection vectors this rune policy does not address (pipes, brackets, angle brackets); apply the sink's escaper on top.
 
@@ -216,8 +218,8 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | Unicode normalization (NFC/NFKC) | Normalization changes text identity; a display-safety policy must not. Normalize separately if the app needs it. |
 | Case folding and case mapping | Folding is not identity (U+212A folds to ASCII `K`) and its answers move with the toolchain's Unicode tables; a display-safety policy must not decide what two strings mean. Match on raw bytes, or canonicalize explicitly. |
 | Zero-width and confusable runes | Invisible-character and homoglyph spoofing is a rabbit hole with legitimate-text collateral (ZWJ in emoji, real Cyrillic). The policy targets runes with control semantics, where replacement is always correct. |
-| Configurable replacement rune | The space is the policy; a different replacement is a two-line `strings.Map` over `IsUnsafe` (shown above). |
-| Removing instead of replacing | Deletion changes rune offsets and can splice adjacent fragments into new tokens; 1:1 replacement preserves shape. Compose `IsUnsafe` for the rare sink that genuinely wants removal. |
+| Configurable replacement rune | The space is the policy; a different replacement is a two-line `strings.Map` over the predicate for the sink (shown above). |
+| Removing instead of replacing | Deletion changes rune offsets and can splice adjacent fragments into new tokens; 1:1 replacement preserves shape. Compose `IsUnsafeSingleLine` or `IsUnsafeMultiLine` for the rare sink that genuinely wants removal. |
 
 ## Disclaimer
 
