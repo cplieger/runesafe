@@ -158,7 +158,7 @@ Decoding is untouched: a string-kinded named type unmarshals natively, raw bytes
 
 - slog resolves the value sanitized (`slog.LogValuer`).
 - `fmt` renders it sanitized (`fmt.Stringer`), so `fmt.Errorf("upstream said %s", v)` carries no escape introducers from construction on; that is the one boundary that covers error values. This form keeps CR/LF, so route such an error's text through `SingleLine()` if it is ever bound for a hand-built sink that escapes nothing.
-- `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`). Map keys are the exception: `encoding/json` reads a string-kinded key's bytes directly without calling `MarshalText`, so key marshaled documents by `v.String()`, never by the tagged value.
+- `encoding/json` emits it sanitized at any nesting depth (`encoding.TextMarshaler`), a map key included — the key-kind short-circuit that used to resolve a string-kinded key straight from its bytes, bypassing `MarshalText`, is gone in Go 1.27's v2-backed `encoding/json`.
 
 Compute paths keep the exact bytes via `Raw()`:
 

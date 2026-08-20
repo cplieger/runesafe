@@ -194,29 +194,27 @@ func TestUntrustedKeptCRLFCannotForgeRecord(t *testing.T) {
 	}
 }
 
-// TestUntrustedMapKeyRawLimitation pins the documented encoding/json
-// limitation: a string-kinded map key never routes through MarshalText,
-// so a map[Untrusted]V key marshals raw. If a future Go release changes
-// key resolution, this test fails and the doc caveat can be removed.
-//
-// EXPECTED TO FAIL ON GO 1.27, where the change is an IMPROVEMENT, not a
-// break: the v2-backed encoding/json routes map keys through MarshalText, so
-// the key is sanitized and the raw U+009B / U+202E this test looks for are
-// gone. Verified on Go 1.26.5 under GOEXPERIMENT=jsonv2. The remedy is to
-// retire the caveat rather than repair anything — invert this test to assert
-// the key IS sanitized, and delete the "Map KEYS are the one exception"
-// paragraph from Untrusted's doc plus the matching note on MarshalText. No
-// consumer relies on the limitation today (nothing in the fleet declares a
-// map[Untrusted]V), so nothing else has to move with it.
-func TestUntrustedMapKeyRawLimitation(t *testing.T) {
-	m := map[runesafe.Untrusted]int{"k\u009b\u202e": 1}
-	out, err := json.Marshal(m)
+// TestUntrustedMapKeySanitized pins the one emission path encoding/json used
+// to bypass: a string-kinded map key. Until Go 1.27 a key-kind short-circuit
+// resolved such a key straight from its bytes, so a map[Untrusted]V key
+// marshaled RAW and the type doc had to carry that as an exception; the
+// v2-backed encoding/json routes the key through MarshalText, so a key is
+// sanitized like every other sink. Measured across the bump on this test's
+// own input: go1.26.7 emits {"k\u009b\u202e":1} and go1.27.0 emits
+// {"k  ":1}, with no v1 option restoring the old bytes. Nothing in the fleet
+// declares a map[Untrusted]V, so closing the hole costs no consumer anything.
+func TestUntrustedMapKeySanitized(t *testing.T) {
+	key := runesafe.Untrusted("k\u009b\u202e")
+	out, err := json.Marshal(map[runesafe.Untrusted]int{key: 1})
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
 	for _, r := range []rune{'\u009b', '\u202e'} {
-		if !bytes.ContainsRune(out, r) {
-			t.Errorf("map key no longer emits raw %U (%s); encoding/json key resolution changed -- update the MarshalText doc caveat", r, out)
+		if bytes.ContainsRune(out, r) {
+			t.Errorf("map key still emits raw %U: %s", r, out)
 		}
+	}
+	if want := `{"` + key.String() + `":1}`; string(out) != want {
+		t.Errorf("Marshal(map[Untrusted]int) = %s, want the MarshalText form %s", out, want)
 	}
 }
