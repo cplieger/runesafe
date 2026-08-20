@@ -3,6 +3,7 @@ package runesafe_test
 import (
 	"bytes"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -216,5 +217,41 @@ func TestUntrustedMapKeySanitized(t *testing.T) {
 	}
 	if want := `{"` + key.String() + `":1}`; string(out) != want {
 		t.Errorf("Marshal(map[Untrusted]int) = %s, want the MarshalText form %s", out, want)
+	}
+}
+
+// TestUntrustedSurvivesJSONv2Strictness pins what the tag buys a consumer that
+// moves its encoder to encoding/json/v2, whose defaults REJECT invalid UTF-8 in
+// a JSON string instead of substituting U+FFFD the way v1 does. Measured on
+// go1.27.0: a plain string field carrying one invalid byte aborts the marshal
+// with `jsontext: invalid UTF-8 within "/v"` once the object is already partly
+// written, while the tagged field emits cleanly and byte-identically to v1 —
+// MarshalText hands the encoder the Sanitize form, which is always valid UTF-8
+// by construction, so the stricter boundary has nothing to refuse. The two
+// postures read as opposed (v2 refuses the byte, this package rewrites it) and
+// in fact compose: sanitizing at the sink is what keeps a strict encoder from
+// failing on upstream bytes nobody controls.
+func TestUntrustedSurvivesJSONv2Strictness(t *testing.T) {
+	const bad = "a\xffb\u009b\u202e"
+
+	tagged := struct {
+		V runesafe.Untrusted `json:"v"`
+	}{V: runesafe.Untrusted(bad)}
+	out, err := jsonv2.Marshal(tagged)
+	if err != nil {
+		t.Fatalf("json/v2 Marshal of a tagged field: %v", err)
+	}
+	if want := `{"v":"` + runesafe.Sanitize(bad) + `"}`; string(out) != want {
+		t.Errorf("json/v2 Marshal = %s, want the Sanitize form %s", out, want)
+	}
+	if v1, err := json.Marshal(tagged); err != nil || string(v1) != string(out) {
+		t.Errorf("v1 Marshal = %s (err %v), want v2's bytes %s", v1, err, out)
+	}
+
+	plain := struct {
+		V string `json:"v"`
+	}{V: bad}
+	if _, err := jsonv2.Marshal(plain); err == nil {
+		t.Error("json/v2 accepted invalid UTF-8 in an untagged string field; the tag's value here rests on it refusing")
 	}
 }
