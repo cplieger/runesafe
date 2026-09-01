@@ -441,8 +441,7 @@ func BenchmarkSanitize(b *testing.B) {
 // which would move the series by orders of magnitude rather than by percent.
 //
 // No SetBytes for the same reason: the call does not scan its input, so a
-// bytes-per-second figure derived from the fixture's length is meaningless. The
-// first draft of this file printed 3.5 TB/s.
+// bytes-per-second figure derived from the fixture's length is meaningless.
 func BenchmarkCapBytes(b *testing.B) {
 	ascii := cleanASCII(typicalBytes)
 	multi := cleanUTF8(typicalBytes)
