@@ -197,13 +197,12 @@ func TestIsBidiControl(t *testing.T) {
 // TestClassifierUnicodeConformance sweeps every valid rune and checks the
 // classifiers against the standard library's Unicode tables as an
 // independent oracle: IsBidiControl must equal unicode.Is(Bidi_Control, r)
-// exactly (the doc comment's claim), IsUnsafe must equal the documented
-// union — Cc controls (unicode.IsControl covers C0, DEL, and C1 exactly),
-// Bidi_Control, and the U+2028/U+2029 separators — with the two policies
-// diverging on CR/LF alone, and IsUnsafeNonASCII must equal both the
-// above-ASCII restriction of that union and the literal C1|bidi|separator
-// enumeration a percent-escaper composes. This is the drift guard against a
-// future hand-edit of the hardcoded ranges.
+// exactly, IsUnsafe must equal the documented union — Cc controls
+// (unicode.IsControl covers C0, DEL, and C1 exactly), Bidi_Control, and the
+// U+2028/U+2029 separators — with the two policies diverging on CR/LF alone,
+// and IsUnsafeNonASCII must equal both the above-ASCII restriction of that
+// union and the literal C1|bidi|separator enumeration a percent-escaper
+// composes. The drift guard against a future hand-edit of the hardcoded ranges.
 func TestClassifierUnicodeConformance(t *testing.T) {
 	for r := rune(0); r <= unicode.MaxRune; r++ {
 		bidi := unicode.Is(unicode.Bidi_Control, r)
@@ -236,11 +235,11 @@ func TestClassifierUnicodeConformance(t *testing.T) {
 // would keep the sweep green while silently widening what every consumer's
 // sinks replace. These four counts make that a reviewed change instead.
 //
-// Measured identical on go1.26.7 (Unicode 15.0.0) and go1.27.0 (Unicode
-// 17.0.0), because the policy is pinned to code points rather than to table
-// lookups: Cc(65) + Bidi_Control(12) + U+2028/U+2029 = 79 under the
-// single-line policy, minus CR and LF = 77 under the multi-line one, and
-// C1(32) + Bidi_Control(12) + the two separators = 46 above ASCII.
+// Identical on go1.26.7 (Unicode 15.0.0) and go1.27.0 (Unicode 17.0.0),
+// because the policy is pinned to code points rather than to table lookups:
+// Cc(65) + Bidi_Control(12) + U+2028/U+2029 = 79 under the single-line
+// policy, minus CR and LF = 77 under the multi-line one, and C1(32) +
+// Bidi_Control(12) + the two separators = 46 above ASCII.
 func TestPolicyCardinalityPinned(t *testing.T) {
 	var bidi, single, multi, nonASCII int
 	for r := rune(0); r <= unicode.MaxRune; r++ {
@@ -425,9 +424,9 @@ func legacyCapped(s string, n int, marker string, sanitize func(string) string) 
 
 // TestSanitizeCappedParity holds the collapsed pair byte-for-byte against that
 // oracle across the adversarial corpus, every interesting cap and several marker
-// widths, and pins the delegation itself in the same sweep: a Capped call equals
-// its Budget equivalent over the sanitized value, which is what makes the two
-// bounds one implementation rather than two that happen to agree.
+// widths, and pins the delegation in the same sweep: a Capped call equals its
+// Budget equivalent over the sanitized value, which is what makes the two bounds
+// one implementation rather than two that happen to agree.
 //
 // The corpus carries the divergence class deliberately — a value whose RAW bytes
 // exceed the cap while its sanitized form fits, because multi-byte unsafe runes

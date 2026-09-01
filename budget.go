@@ -9,20 +9,14 @@ import "strings"
 // charged inside the budget exactly as SanitizeCapped charges it.
 //
 // It is a SEPARATE primitive from the Capped pair rather than an option on it,
-// and the reason is in that pair's own contract: SanitizeCapped sanitizes all
-// of s by construction, because its cap must survive sanitization growth for a
-// value already known to be small, and no marker placement changes that. A
-// caller whose value is NOT known to be small needs the opposite order, and a
-// caller assembling SEVERAL values under one shared bound needs a running
-// remainder and a latched fact that a single-call function cannot express.
-// Widening the pair to reach either shape would have made a two-argument
-// function a four-argument one and put a work bound and an output bound behind
-// the same name; the pair therefore stays as it is (see SanitizeCapped, which
-// names both shapes as ones it must not be widened to serve), and this type
-// owns them. What the two share — the rune-boundary cut, the marker charged
-// inside the cap, the cut FACT returned rather than inferred from the marker —
-// is identical on purpose, so a call site can move between them without
-// re-reading either contract.
+// because SanitizeCapped sanitizes all of s by construction — its cap must
+// survive sanitization growth — and no marker placement changes that. A caller
+// whose value is NOT known to be small needs the opposite order, and a caller
+// assembling SEVERAL values under one shared bound needs a running remainder and
+// a latched fact that a single-call function cannot express. What the two share —
+// the rune-boundary cut, the marker charged inside the cap, the cut FACT returned
+// rather than inferred from the marker — is identical on purpose, so a call site
+// can move between them without re-reading either contract.
 //
 // The order is the whole point of the type. A multi-megabyte upstream value
 // walked by strings.Map in a memory-limited process is a work-amplification

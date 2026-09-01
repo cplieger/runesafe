@@ -29,19 +29,15 @@
 //     split records like a raw newline.
 //
 // The four classes are enumerated as CODE POINTS, never looked up in a Unicode
-// table, so a Unicode upgrade cannot move the policy. Measured rune by rune
-// over all 1,114,112 code points: every predicate and both sanitizers return
-// identical answers on Go 1.26.7 (Unicode 15.0.0) and Go 1.27.0 (Unicode
-// 17.0.0), whose 10,615 newly assigned runes are all graphic — not one is a
-// Cc, Cf, Bidi_Control or separator, so not one joins an unsafe class. The
-// tables are still consulted, but only by the tests, as an independent oracle:
-// they fail if a future Unicode adds a member to a class enumerated here, and
-// each class's size is pinned so mirroring such an addition has to be
-// deliberate. What a Unicode upgrade does move is how a SINK renders this
-// package's output: slog's TextHandler decides whether to quote an attribute
-// via unicode.IsPrint, so a rune newly assigned in Unicode 17 that it escaped
-// as \Uxxxxxxxx under Unicode 15 now appears literally. That is an encoder's
-// choice about a graphic rune, not a change in what this package replaces.
+// table, so a Unicode upgrade cannot move the policy. Verified rune by rune over
+// all 1,114,112 code points: every predicate and both sanitizers return identical
+// answers on Go 1.26.7 (Unicode 15.0.0) and Go 1.27.0 (Unicode 17.0.0). The tables
+// are consulted only by the tests, as an independent oracle: they fail if a future
+// Unicode adds a member to a class enumerated here, and each class's size is pinned
+// so mirroring such an addition has to be deliberate. What a Unicode upgrade does
+// move is how a SINK renders this package's output — slog's TextHandler decides
+// whether to quote an attribute via unicode.IsPrint — which is an encoder's choice
+// about a graphic rune, not a change in what this package replaces.
 //
 // The Untrusted string type makes the policy travel with the value: tag an
 // upstream field at its decode struct and every standard sink applies
@@ -77,11 +73,10 @@
 // form, spending one shared byte budget across several values and keeping ONE
 // truncation fact for the whole aggregate. Keeping a value's tail behind a
 // prefixed marker remains the caller's own rune-boundary walk.
-// Apply the sanitizer at the emit boundary
-// (the slog
-// call site, just before JSON encoding) so comparisons and dedupe keys keep
-// operating on the raw value, and use one policy per application so two
-// sinks cannot drift.
+//
+// Apply the sanitizer at the emit boundary (the slog call site, just before JSON
+// encoding) so comparisons and dedupe keys keep operating on the raw value, and
+// use one policy per application so two sinks cannot drift.
 //
 // A caller that also removes a KNOWN secret value from the same text redacts
 // on both sides of the sanitizer and caps last, in the order

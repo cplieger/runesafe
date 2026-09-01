@@ -35,10 +35,9 @@ var fuzzSeeds = []string{
 	// One seed per Unicode class that MOVED between Go 1.26.7's Unicode 15 and
 	// Go 1.27.0's Unicode 17. None of these runes is in any of the four unsafe
 	// classes on either side, which is the point: the committed corpus is what
-	// the weekly fuzz re-explores from and it held none of them, so the claim
-	// that the policy is Unicode-version-independent went unprobed at exactly
-	// the code points that changed. Each pairs its delta rune with an unsafe
-	// one so the sanitizer has work to do at a multi-byte boundary.
+	// the weekly fuzz re-explores from and it held none of them. Each pairs its
+	// delta rune with an unsafe one so the sanitizer has work to do at a
+	// multi-byte boundary.
 	"\u202e\u0390\u1fd3\u03b0\u1fe3\ufb05\ufb06\u009b", // the three pairs SimpleFold now folds together
 	"\u0130\u212aKi\u009b",                             // the only two non-ASCII runes that lower to ASCII
 	"a\U0001171e\u202eb",                               // U+1171E: Mn -> Mc, the matrix's one category removal
@@ -52,8 +51,7 @@ var fuzzSeeds = []string{
 // carries no rune its own policy classifies unsafe (cross-function
 // consistency with IsUnsafe), preserves the input's rune count (replacement
 // is 1:1, never a drop or splice), equals an independent rune-by-rune walk
-// (differential oracle for the strings.Map plumbing), and is a fixed point
-// (sanitizing is idempotent, so double-sanitizing at two layers is safe).
+// (differential oracle for the strings.Map plumbing), and is a fixed point.
 // It also pins the composition law relating the presets: SanitizeSingleLine
 // of a Sanitize output equals SanitizeSingleLine of the raw input, because
 // the strict policy is a superset of the keep-CR/LF policy.
@@ -255,9 +253,9 @@ func FuzzUntrustedContract(f *testing.F) {
 // outside the cap), a within-cap result — and empty input under any cap,
 // negative included — is byte-identical to the unbounded SanitizeSingleLine
 // form, and an over-cap result is that form's rune-safe prefix plus the
-// marker. It also holds the preset byte-identical to its pre-rebuild
-// implementation (legacySanitizeSingleLineBounded), the contract every
-// existing call site depends on.
+// marker. It also holds the preset byte-identical to
+// legacySanitizeSingleLineBounded, the contract every existing call site
+// depends on.
 func FuzzSanitizeSingleLineBounded(f *testing.F) {
 	f.Add("hello", 5)
 	f.Add("a\nb\x1bc", 3)
@@ -298,16 +296,14 @@ func FuzzSanitizeSingleLineBounded(f *testing.F) {
 }
 
 // FuzzSanitizeCapped drives the caller-marker primitive on both CR/LF
-// policies with arbitrary input, cap, and marker, and pins the three
-// guarantees its consumers rely on: the returned text NEVER exceeds
-// max(n, 0) bytes however long the marker is (the hard total bound a
-// persisted record or a vendor payload budget needs), cut is true exactly
-// when the sanitized form did not fit (and the text is then that form's
-// rune-safe prefix, plus the marker verbatim whenever the cap can hold it),
-// and an uncut result is byte-identical to the matching unbounded preset.
-// The marker is caller program text and deliberately not sanitized, so the
-// rune-policy and UTF-8 assertions apply to the body the primitive itself
-// produced.
+// policies with arbitrary input, cap, and marker, and pins three
+// guarantees: the returned text NEVER exceeds max(n, 0) bytes however long
+// the marker is, cut is true exactly when the sanitized form did not fit
+// (and the text is then that form's rune-safe prefix, plus the marker
+// verbatim whenever the cap can hold it), and an uncut result is
+// byte-identical to the matching unbounded preset. The marker is caller
+// program text and deliberately not sanitized, so the rune-policy and
+// UTF-8 assertions apply to the body the primitive itself produced.
 func FuzzSanitizeCapped(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add(s, 5, "...")
@@ -366,17 +362,16 @@ func FuzzSanitizeCapped(f *testing.F) {
 }
 
 // FuzzBudget drives the work-bounding primitive on both CR/LF policies with
-// arbitrary input, budget, and marker, and pins what separates it from the
-// Capped pair. Three guarantees are shared with that pair and asserted the same
-// way: the text never exceeds max(n, 0) bytes however long the marker is, the
-// body the primitive produced is valid UTF-8 carrying no rune its own policy
-// calls unsafe, and an uncut result is byte-identical to the matching unbounded
-// preset. Two are its own. The WORK bound is structural rather than timed: the
-// body must be a prefix of the sanitized form of a rune-boundary prefix of s at
-// most max(n, 0) bytes long, so nothing in the result can have come from beyond
-// the budget — which is only possible if the raw cap ran before the sanitizer.
-// And the packaged form must equal the hand-rolled composition of CapBytes,
-// Sanitize and CapBytes it exists to replace (composedBudgeted). The aggregate
+// arbitrary input, budget, and marker. Three guarantees are shared with the
+// Capped pair and asserted the same way: the text never exceeds max(n, 0) bytes
+// however long the marker is, the body the primitive produced is valid UTF-8
+// carrying no rune its own policy calls unsafe, and an uncut result is
+// byte-identical to the matching unbounded preset. Two are its own. The WORK
+// bound is structural rather than timed: the body must be a prefix of the
+// sanitized form of a rune-boundary prefix of s at most max(n, 0) bytes long, so
+// nothing in the result can have come from beyond the budget — which is only
+// possible if the raw cap ran before the sanitizer. And the packaged form must
+// equal composedBudgeted, the hand-rolled composition it replaces. The aggregate
 // form is held to the same total bound across two writes, with the truncation
 // fact monotone once latched.
 func FuzzBudget(f *testing.F) {

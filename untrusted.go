@@ -34,9 +34,8 @@ import (
 //   - encoders: MarshalText implements encoding.TextMarshaler, so
 //     encoding/json and any TextMarshaler-aware encoder emit the
 //     Sanitize'd form, however deeply the value nests in a document —
-//     a map KEY included, which encoding/json short-circuited to the raw
-//     bytes until the v2-backed rewrite in Go 1.27 began routing a
-//     string-kinded key through MarshalText.
+//     a map KEY included, which Go 1.27's v2-backed encoding/json routes
+//     through MarshalText.
 //
 // Raw returns the exact bytes for the paths that must not be transformed:
 // matching, dedupe keys, context-aware escapers, and byte caps on the raw
@@ -90,12 +89,11 @@ func (u Untrusted) String() string {
 
 // MarshalText implements encoding.TextMarshaler: encoding/json and any
 // TextMarshaler-aware encoder emit the Sanitize'd form at any nesting
-// depth, a map KEY included — the key-kind short-circuit that used to
-// resolve a string-kinded key straight from its bytes is gone in Go 1.27's
-// v2-backed encoding/json, which this module's go directive requires, so
-// the claim holds for every consumer. Decoding is deliberately untouched
-// (no UnmarshalText), so raw bytes survive ingestion; see the type comment
-// for the machine-read persistence rule this asymmetry imposes.
+// depth, a map KEY included — Go 1.27's v2-backed encoding/json, which this
+// module's go directive requires, routes a string-kinded key through
+// MarshalText. Decoding is deliberately untouched (no UnmarshalText), so raw
+// bytes survive ingestion; see the type comment for the machine-read
+// persistence rule this asymmetry imposes.
 func (u Untrusted) MarshalText() ([]byte, error) {
 	return []byte(u.String()), nil
 }

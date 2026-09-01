@@ -12,9 +12,8 @@ import (
 // caller to hand-roll out of the exported primitives — cap the RAW bytes on a
 // rune boundary, sanitize the chunk, re-cap the growth sanitizing can cause,
 // then charge the marker inside the cap — kept as the independent oracle for
-// the packaged form. It is written against the public API only, so it pins the
-// primitive against the composition it exists to replace rather than against
-// its own internals.
+// the packaged form. Written against the public API only, so it pins the
+// primitive against the composition rather than against its own internals.
 func composedBudgeted(s string, n int, marker string, sanitize func(string) string) (string, bool) {
 	clean, cut := "", s != ""
 	if n > 0 {
@@ -120,9 +119,8 @@ func TestSanitizeBudgetedPair(t *testing.T) {
 // sanitizing ALL of it would collapse to a megabyte of spaces and fill the
 // 8-byte budget with five of them — which is exactly what SanitizeCapped
 // returns. The pre-cap form can only ever have looked at the first 8 bytes,
-// and its result says so: two spaces, the whole of what a rune-boundary cut at
-// 8 bytes contains. The assertion is on the CAP's effect, not on how long the
-// call took, so it holds on any machine.
+// and its result says so: two spaces. The assertion is on the CAP's effect,
+// not on how long the call took, so it holds on any machine.
 func TestSanitizeBudgetedBoundsSanitizerWork(t *testing.T) {
 	huge := "A" + strings.Repeat("\u202e", 1<<20)
 
@@ -307,9 +305,8 @@ func TestBudgetRecapsSanitizerGrowth(t *testing.T) {
 
 // TestBudgetMatchesCappedForHonestValues pins the adoption promise: for a
 // valid-UTF-8 value carrying no unsafe rune the two orders are byte-identical,
-// cut for cut, so moving a call site onto the work-bounding form changes
-// nothing an honest value emits. The corpus deliberately holds no CR or LF, so
-// every value is honest under BOTH CR/LF policies.
+// cut for cut. The corpus deliberately holds no CR or LF, so every value is
+// honest under BOTH CR/LF policies.
 func TestBudgetMatchesCappedForHonestValues(t *testing.T) {
 	inputs := []string{
 		"", "a", "hello world", "already ends in...", "葬送のフリーレン",

@@ -27,10 +27,9 @@ func IsBidiControl(r rune) bool {
 // terminal-escape introducers), a Unicode bidi control (IsBidiControl), or
 // the U+2028/U+2029 line separators. CR and LF are SAFE under this policy.
 // It is the per-rune predicate behind [Sanitize]; the single-line policy is
-// [IsUnsafeSingleLine]. The v1 form IsUnsafe(r, keepCRLF) split into these
-// two names so the CR/LF policy is legible at the call site — and so that
-// mechanically deleting the bool cannot silently pick a policy: neither
-// replacement keeps the old name.
+// [IsUnsafeSingleLine]. It replaces the v1 form IsUnsafe(r, keepCRLF); neither
+// replacement keeps the old name, so mechanically deleting the bool cannot
+// silently pick a policy.
 func IsUnsafeMultiLine(r rune) bool {
 	return r != '\n' && r != '\r' && isUnsafeCore(r)
 }
@@ -102,15 +101,12 @@ func SanitizeSingleLine(s string) string {
 // in n bytes, and false whenever the returned text is the whole sanitized
 // form. It exists because a marker cannot prove a cut — a value may end in
 // the marker on its own — so a caller that must report truncation as a fact
-// (a log attribute beside the value, a decision to keep a fuller copy
-// elsewhere) would otherwise re-implement this composition just to set its
-// own flag.
+// would otherwise re-implement this composition just to set its own flag.
 //
 // n bounds the TOTAL, which is what a caller with a real budget needs: a
 // record persisted under a write limit, a payload assembled under a vendor
 // byte cap, a fixed-width column. SanitizeSingleLineBounded puts its marker
-// OUTSIDE the cap (a truncated result runs to n+3 bytes), which leaves such
-// a caller subtracting the marker's width by hand at every call site.
+// OUTSIDE the cap (a truncated result runs to n+3 bytes).
 //
 // A marker longer than n cannot be shown intact, and a partial marker is
 // indistinguishable from content, so for n < len(marker) the result is the
@@ -123,29 +119,21 @@ func SanitizeSingleLine(s string) string {
 // mark — a marker assembled from untrusted input must be sanitized by the
 // caller first.
 //
-// The CR/LF policy is a second function rather than a parameter on this one,
-// deliberately: the package already expresses that choice as the named
-// Sanitize / SanitizeSingleLine pair, so a call site names its sink instead
-// of passing an opaque boolean next to two other tuning arguments. The
-// per-rune predicates follow the same rule since v2: IsUnsafeMultiLine and
-// IsUnsafeSingleLine are named for their policy, and a composed policy takes
-// whichever predicate is its data.
-// SanitizeSingleLineCapped is the strict twin.
+// The CR/LF policy is a second function rather than a parameter, so a call site
+// names its sink instead of passing an opaque boolean next to two other tuning
+// arguments. SanitizeSingleLineCapped is the strict twin.
 //
 // Two consumer shapes this pair deliberately does NOT serve, and must not be
 // widened to serve:
 //
 //   - Capping BEFORE sanitizing, to bound the sanitizer's WORK rather than
-//     its output. A caller that must never walk a multi-megabyte upstream
-//     value in a memory-limited process caps the raw bytes first (CapBytes,
-//     then Sanitize on the chunk); this function sanitizes all of s by
-//     construction, and no marker placement changes that. Such a caller also
-//     tends to aggregate one truncation fact across several appends, which a
-//     single-call primitive cannot express. Both shapes belong to
-//     SanitizeBudgeted and Budget — a separate primitive carrying the cap
-//     ahead of the sanitizer and a running remainder, sharing this pair's
-//     rune-boundary cut, marker-inside-the-cap and cut-as-a-fact rules while
-//     leaving the contract above exactly as it is.
+//     its output. This function sanitizes all of s by construction, and no
+//     marker placement changes that. Such a caller also tends to aggregate one
+//     truncation fact across several appends, which a single-call primitive
+//     cannot express. Both shapes belong to SanitizeBudgeted and Budget, which
+//     carry the cap ahead of the sanitizer and a running remainder while
+//     sharing this pair's rune-boundary cut, marker-inside-the-cap and
+//     cut-as-a-fact rules.
 //   - Keeping the TAIL behind a PREFIXED marker. When the identifying part of
 //     a value sits at its end (a path's file name), the caller wants
 //     marker + suffix; this function keeps the head. Compose the
@@ -157,10 +145,7 @@ func SanitizeCapped(s string, n int, marker string) (text string, cut bool) {
 	// OUTPUT bound, and with it the pair's side of the one divergence
 	// documented on SanitizeBudgeted: the budget is spent on the sanitized
 	// form, so a value whose RAW bytes exceed n while its sanitized form fits
-	// still comes back whole and unmarked here. The budget's own pre-cap then
-	// has nothing left to collapse, and its sanitizer pass is a no-op —
-	// Sanitize is idempotent and its output is valid UTF-8 — so the bytes
-	// spent are exactly the sanitized form this function has always bounded.
+	// still comes back whole and unmarked here.
 	return SanitizeBudgeted(Sanitize(s), n, marker)
 }
 
@@ -196,9 +181,8 @@ func SanitizeSingleLineCapped(s string, n int, marker string) (text string, cut 
 // (marker included) under a hard budget uses SanitizeSingleLineCapped, which
 // returns the fact and counts the marker inside the cap. A non-positive n
 // yields "..." alone for a non-empty input ("" stays "", whatever n is).
-// The marker's placement outside the cap is this preset's settled contract,
-// not an accident of its implementation: it stays as it is so every existing
-// call site keeps its byte-for-byte output.
+// The marker's placement outside the cap is settled contract: it stays as it is
+// so every existing call site keeps its byte-for-byte output.
 func SanitizeSingleLineBounded(s string, n int) string {
 	// The marker rides OUTSIDE the cap here, so this preset shares no
 	// arithmetic with the marker-inside-the-cap bound the Capped pair and the
