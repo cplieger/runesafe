@@ -168,9 +168,9 @@ func TestUntrustedComparableRaw(t *testing.T) {
 // the keepCRLF=true preset in LogValue is safe for BOTH built-in handlers:
 // a kept CR/LF is escaped by the handler's own encoding (JSONHandler string
 // escaping; TextHandler strconv quoting), so an upstream newline can never
-// forge a second log record. This is an environmental-conformance pin, like
+// forge a second log record. An environmental-conformance pin, like
 // TestClassifierUnicodeConformance: it guards the stdlib behavior the
-// package's documented safety claim rests on across Go upgrades.
+// package's safety claim rests on across Go upgrades.
 func TestUntrustedKeptCRLFCannotForgeRecord(t *testing.T) {
 	u := runesafe.Untrusted("ok\r\nlevel=ERROR msg=forged")
 	handlers := map[string]func(*bytes.Buffer) slog.Handler{
@@ -195,15 +195,11 @@ func TestUntrustedKeptCRLFCannotForgeRecord(t *testing.T) {
 	}
 }
 
-// TestUntrustedMapKeySanitized pins the one emission path encoding/json used
-// to bypass: a string-kinded map key. Until Go 1.27 a key-kind short-circuit
-// resolved such a key straight from its bytes, so a map[Untrusted]V key
-// marshaled RAW and the type doc had to carry that as an exception; the
-// v2-backed encoding/json routes the key through MarshalText, so a key is
-// sanitized like every other sink. Measured across the bump on this test's
-// own input: go1.26.7 emits {"k\u009b\u202e":1} and go1.27.0 emits
-// {"k  ":1}, with no v1 option restoring the old bytes. Nothing in the fleet
-// declares a map[Untrusted]V, so closing the hole costs no consumer anything.
+// TestUntrustedMapKeySanitized pins the one emission path encoding/json used to
+// bypass: a string-kinded map key. The v2-backed encoding/json routes the key
+// through MarshalText, so a key is sanitized like every other sink. Measured
+// across the bump on this test's own input: go1.26.7 emits {"k\u009b\u202e":1}
+// and go1.27.0 emits {"k  ":1}, with no v1 option restoring the old bytes.
 func TestUntrustedMapKeySanitized(t *testing.T) {
 	key := runesafe.Untrusted("k\u009b\u202e")
 	out, err := json.Marshal(map[runesafe.Untrusted]int{key: 1})
@@ -221,16 +217,13 @@ func TestUntrustedMapKeySanitized(t *testing.T) {
 }
 
 // TestUntrustedSurvivesJSONv2Strictness pins what the tag buys a consumer that
-// moves its encoder to encoding/json/v2, whose defaults REJECT invalid UTF-8 in
-// a JSON string instead of substituting U+FFFD the way v1 does. Measured on
-// go1.27.0: a plain string field carrying one invalid byte aborts the marshal
-// with `jsontext: invalid UTF-8 within "/v"` once the object is already partly
-// written, while the tagged field emits cleanly and byte-identically to v1 —
-// MarshalText hands the encoder the Sanitize form, which is always valid UTF-8
-// by construction, so the stricter boundary has nothing to refuse. The two
-// postures read as opposed (v2 refuses the byte, this package rewrites it) and
-// in fact compose: sanitizing at the sink is what keeps a strict encoder from
-// failing on upstream bytes nobody controls.
+// moves its encoder to encoding/json/v2, whose defaults REJECT invalid UTF-8 in a
+// JSON string instead of substituting U+FFFD the way v1 does. A plain string field
+// carrying one invalid byte aborts the marshal with `jsontext: invalid UTF-8
+// within "/v"` once the object is already partly written, while the tagged field
+// emits cleanly and byte-identically to v1 — MarshalText hands the encoder the
+// Sanitize form, always valid UTF-8 by construction, so the stricter boundary has
+// nothing to refuse.
 func TestUntrustedSurvivesJSONv2Strictness(t *testing.T) {
 	const bad = "a\xffb\u009b\u202e"
 
