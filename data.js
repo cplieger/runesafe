@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
   "lastUpdate": 1788307995269,
-  "repoUrl": "https://github.com/cplieger/ci",
+  "repoUrl": "https://github.com/cplieger/runesafe",
   "entries": {
     "Benchmark": [
       {
@@ -394,10 +394,10 @@ window.BENCHMARK_DATA = {
             "username": "web-flow",
             "email": "noreply@github.com"
           },
-          "id": "73fcb5e94e2f68f4366ffd27bd2af0247e0b054a",
-          "message": "chore(deps): update cplieger/ci digest to 77bb665 (#557)",
-          "timestamp": "2026-09-01T16:02:18Z",
-          "url": "https://github.com/cplieger/ci/commit/73fcb5e94e2f68f4366ffd27bd2af0247e0b054a"
+          "id": "05960b82c7cbaaebc70b4f5e1946afc53266725e",
+          "message": "chore(deps): update dependency go to v1.27.1 (#162)",
+          "timestamp": "2026-09-01T21:11:18Z",
+          "url": "https://github.com/cplieger/runesafe/commit/05960b82c7cbaaebc70b4f5e1946afc53266725e"
         },
         "date": 1788307994787,
         "tool": "customSmallerIsBetter",
