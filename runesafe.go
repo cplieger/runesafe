@@ -136,8 +136,8 @@ func SanitizeSingleLine(s string) string {
 //     cut-as-a-fact rules.
 //   - Keeping the TAIL behind a PREFIXED marker. When the identifying part of
 //     a value sits at its end (a path's file name), the caller wants
-//     marker + suffix; this function keeps the head. Compose the
-//     rune-boundary walk locally for that.
+//     marker + suffix; this function keeps the head. CapBytesTail is the
+//     rune-boundary walk for that half; the marker stays the caller's.
 func SanitizeCapped(s string, n int, marker string) (text string, cut bool) {
 	// The rune-boundary cut, the marker charged inside the cap and the cut
 	// FACT are the Budget engine's, so there is one copy of that arithmetic
@@ -243,4 +243,26 @@ func CapBytes(s string, n int) string {
 		cut--
 	}
 	return s[:cut]
+}
+
+// CapBytesTail keeps at most the last n bytes of s without splitting a
+// multi-byte rune: the cut advances FORWARD to the next rune start, so the
+// result is a valid-UTF-8 suffix no longer than n bytes. Forward holds that
+// bound where CapBytes' backward backoff would exceed it, and it drops the
+// partial LEADING rune encoding/json rewrites to U+FFFD, so a capped field
+// cannot open on a replacement rune. Non-positive n returns "". The cut is
+// rune-safe, not grapheme-safe: it may fall between a base rune and its
+// combining mark, which is this package's documented Unicode non-goal.
+func CapBytesTail(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if len(s) <= n {
+		return s
+	}
+	cut := len(s) - n
+	for cut < len(s) && !utf8.RuneStart(s[cut]) {
+		cut++
+	}
+	return s[cut:]
 }
