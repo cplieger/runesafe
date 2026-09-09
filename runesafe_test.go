@@ -146,6 +146,42 @@ func TestCapBytes(t *testing.T) {
 	}
 }
 
+// TestCapBytesTail pins the rune-boundary tail cap: the result is a suffix of
+// the input no longer than n bytes that never BEGINS in a partial rune, so a
+// capped field cannot open on the U+FFFD encoding/json substitutes for a split
+// leading fragment. The combining-mark case pins the package's Unicode
+// non-goal: the cut is rune-safe, not grapheme-safe.
+func TestCapBytesTail(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		n    int
+		want string
+	}{
+		{"under cap", "abc", 10, "abc"},
+		{"exact cap", "abc", 3, "abc"},
+		{"ascii cut", "abcdef", 4, "cdef"},
+		{"two-byte rune advance", "éa", 2, "a"},
+		{"three-byte rune advance", "葬送", 4, "送"},
+		{"three-byte rune exact boundary", "葬送", 3, "送"},
+		{"four-byte rune advance", "\U0001f600a", 3, "a"},
+		{"all multi-byte input", "葬送のフリーレン", 7, "レン"},
+		{"combining mark survives without its base", "e\u0301", 2, "\u0301"},
+		{"replacement-rune growth capped", "\ufffd\ufffd", 4, "\ufffd"},
+		{"zero cap", "abc", 0, ""},
+		{"negative cap", "abc", -1, ""},
+		{"empty input", "", 5, ""},
+		{"all continuation bytes", "\x80\x81\x82", 2, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := runesafe.CapBytesTail(tt.in, tt.n); got != tt.want {
+				t.Errorf("CapBytesTail(%q, %d) = %q, want %q", tt.in, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestIsUnsafeCRLFPolicy pins the CR/LF split across the two predicates: CR
 // and LF are safe only for a sink whose encoder escapes them
 // ([runesafe.IsUnsafeMultiLine]); a single-line sink

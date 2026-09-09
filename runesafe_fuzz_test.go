@@ -191,6 +191,56 @@ func FuzzCapBytes(f *testing.F) {
 	})
 }
 
+// FuzzCapBytesTail drives the rune-boundary tail cap with arbitrary strings
+// and cap values and asserts its contract: the result is a SUFFIX of the
+// input, no longer than max(n, 0) bytes, idempotent under the same cap, and
+// for valid UTF-8 input it stays valid UTF-8 (never begins in a partial rune)
+// while the forward advance discards fewer than utf8.UTFMax bytes below the
+// cap. A result the function CUT begins on a rune start for ARBITRARY input,
+// invalid UTF-8 included — that is the property the advance exists for, and it
+// is stronger than the valid-UTF-8 clause above because the sink sees the
+// leading byte whether or not the rest decodes. It is scoped to a cut on
+// purpose: an uncut value is returned verbatim, so a caller's own leading
+// continuation byte survives, exactly as it does through CapBytes.
+func FuzzCapBytesTail(f *testing.F) {
+	for _, s := range fuzzSeeds {
+		f.Add(s, 3)
+		f.Add(s, 0)
+		f.Add(s, len(s))
+	}
+	f.Add("葬送のフリーレン", 7)
+	f.Add("a\U0001f600b", 4)
+	f.Add("e\u0301\u0302", 3)
+	f.Add("\x80\x81\x82", 2)
+	f.Add("abc", -5)
+	f.Fuzz(func(t *testing.T, in string, n int) {
+		out := runesafe.CapBytesTail(in, n)
+		if !strings.HasSuffix(in, out) {
+			t.Errorf("CapBytesTail(%q, %d) = %q, not a suffix of the input", in, n, out)
+		}
+		if n <= 0 && out != "" {
+			t.Errorf("CapBytesTail(%q, %d) = %q, want empty for non-positive cap", in, n, out)
+		}
+		if n > 0 && len(out) > n {
+			t.Errorf("CapBytesTail(%q, %d) = %q, longer than the cap (%d bytes)", in, n, out, len(out))
+		}
+		if again := runesafe.CapBytesTail(out, n); again != out {
+			t.Errorf("CapBytesTail not idempotent: %q -> %q -> %q under cap %d", in, out, again, n)
+		}
+		if out != "" && len(out) < len(in) && !utf8.RuneStart(out[0]) {
+			t.Errorf("CapBytesTail(%q, %d) = %q, cut mid-rune (0x%02x)", in, n, out, out[0])
+		}
+		if utf8.ValidString(in) {
+			if !utf8.ValidString(out) {
+				t.Errorf("CapBytesTail(%q, %d) = %q, valid input became invalid UTF-8", in, n, out)
+			}
+			if n > 0 && len(in) > n && n-len(out) >= utf8.UTFMax {
+				t.Errorf("CapBytesTail(%q, %d) = %q discarded %d bytes below the cap, want < %d", in, n, out, n-len(out), utf8.UTFMax)
+			}
+		}
+	})
+}
+
 // FuzzUntrustedContract drives the provenance type with arbitrary strings
 // and asserts its full contract against the preset oracles: Raw round-trips
 // the exact input bytes, String/MarshalText/LogValue all equal Sanitize,

@@ -59,6 +59,12 @@ Sanitizing can grow a string (each invalid UTF-8 byte becomes the three-byte U+F
 body := runesafe.CapBytes(runesafe.Sanitize(raw), maxBodyBytes)
 ```
 
+When the identifying part of a value sits at its END (a path's file name, the last lines of a log), `CapBytesTail` keeps the tail instead. Its cut advances forward to the next rune start rather than backing off, so the result still fits the cap and cannot open on the U+FFFD an encoder substitutes for a split leading fragment. The cut is rune-safe, not grapheme-safe: it may fall between a base rune and its combining mark. A marker in front of the tail is yours to add, mirroring the marker `SanitizeSingleLineBounded` appends behind the head cap:
+
+```go
+tail := "..." + runesafe.CapBytesTail(runesafe.Sanitize(raw), maxBodyBytes)
+```
+
 For the common log-attribute case (single-line, capped, visibly marked), `SanitizeSingleLineBounded` packages the composition: `SanitizeSingleLine`, then `CapBytes` on the sanitized form, then `"..."` appended **outside** the cap. `n` budgets the retained body, so a truncated result is at most n+3 bytes; a within-cap result comes back byte-identical, with no marker. Truncated output always ends in the marker, but the converse does not hold (input may itself end in `...`); a caller that must know whether truncation occurred composes the primitives itself. A non-positive `n` yields `"..."` alone for non-empty input, and `""` stays `""`:
 
 ```go
@@ -196,6 +202,7 @@ Two rules keep it honest. Structs persisted for the program's own re-reading sto
 | `(*Budget).Write(raw string) bool` | Append `raw`'s sanitized, pre-capped prefix against the remaining budget. Reports whether the aggregate is still whole — deliberately not "the budget has room", so a caller loops until a write is actually refused. Separators go through it too. |
 | `(*Budget).Result() (text string, cut bool)` | The aggregate and the ONE truncation fact latched across every write, marked once and never longer than max(n, 0) bytes. Reads without spending; calling it twice returns the same pair. |
 | `CapBytes(s string, n int) string` | Truncates to at most n bytes on a rune boundary; never ends in a partial rune. Non-positive n returns "". |
+| `CapBytesTail(s string, n int) string` | Keeps at most the last n bytes on a rune boundary; never begins in a partial rune. The cut advances forward, so the result stays within the cap. Rune-safe, not grapheme-safe. Non-positive n returns "". |
 | `IsUnsafeMultiLine(r rune) bool` | One rune under the multi-line policy: C0 except CR/LF, DEL, C1, Bidi_Control, U+2028/U+2029. |
 | `IsUnsafeSingleLine(r rune) bool` | The strict per-rune policy: everything `IsUnsafeMultiLine` refuses, plus CR and LF. |
 | `IsUnsafeNonASCII(r rune) bool` | The above-ASCII subset: C1, Bidi_Control, U+2028/U+2029. For escapers whose sink already covers ASCII (URL percent-encoders). |

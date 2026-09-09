@@ -71,8 +71,9 @@
 // reversed, for an upstream value whose size the caller does not control,
 // where walking all of it is itself the exposure; Budget is their aggregate
 // form, spending one shared byte budget across several values and keeping ONE
-// truncation fact for the whole aggregate. Keeping a value's tail behind a
-// prefixed marker remains the caller's own rune-boundary walk.
+// truncation fact for the whole aggregate. CapBytesTail is CapBytes' tail
+// sibling, for a value whose identifying part sits at its end; a marker in
+// front of that tail remains the caller's own composition.
 //
 // Apply the sanitizer at the emit boundary (the slog call site, just before JSON
 // encoding) so comparisons and dedupe keys keep operating on the raw value, and

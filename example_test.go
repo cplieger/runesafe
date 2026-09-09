@@ -35,6 +35,19 @@ func ExampleCapBytes() {
 	// Output: "葬送"
 }
 
+// ExampleCapBytesTail keeps the END of a sanitized string, for a value whose
+// identifying part sits at its tail. The marker goes in FRONT and is the
+// caller's own composition, exactly as SanitizeSingleLineBounded appends one
+// behind the head cap.
+func ExampleCapBytesTail() {
+	s := "葬送のフリーレン" // three bytes per rune
+	fmt.Printf("%q\n", runesafe.CapBytesTail(s, 7))
+	fmt.Printf("%q\n", "..."+runesafe.CapBytesTail(s, 7))
+	// Output:
+	// "レン"
+	// "...レン"
+}
+
 // ExampleIsUnsafeMultiLine shows the CR/LF policy split: a newline is safe
 // for a sink whose encoder escapes it, and unsafe for a single-line sink.
 func ExampleIsUnsafeMultiLine() {
