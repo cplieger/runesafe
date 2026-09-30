@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
   "lastUpdate": 1790731704096,
-  "repoUrl": "https://github.com/cplieger/ci",
+  "repoUrl": "https://github.com/cplieger/runesafe",
   "entries": {
     "Benchmark": [
       {
@@ -2289,10 +2289,10 @@ window.BENCHMARK_DATA = {
             "username": "web-flow",
             "email": "noreply@github.com"
           },
-          "id": "48d1c682390d6a54c634f3df4594be7c938087f9",
-          "message": "chore(deps): update cplieger/ci digest to 1cc06fd (#659)",
-          "timestamp": "2026-09-24T22:02:23Z",
-          "url": "https://github.com/cplieger/ci/commit/48d1c682390d6a54c634f3df4594be7c938087f9"
+          "id": "827ac24f096866e5298a09f435609afc870fb3e4",
+          "message": "chore(sync): synced file(s) with cplieger/ci (#209)\n\nCo-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+          "timestamp": "2026-09-25T07:29:18Z",
+          "url": "https://github.com/cplieger/runesafe/commit/827ac24f096866e5298a09f435609afc870fb3e4"
         },
         "date": 1790731703616,
         "tool": "customSmallerIsBetter",
