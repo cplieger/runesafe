@@ -20,3 +20,6 @@ go.work.sum
 **/.code-review/
 **/.judgement/
 **/.steering-maintenance/
+
+# Agent workflow scratch
+.agents/
