@@ -95,7 +95,7 @@ runesafe does no HTML or XSS sanitizing, Unicode normalization or case folding. 
 
 ## Contributing
 
-Issues and pull requests are welcome. See the [contributing guide](https://github.com/cplieger/.github/blob/main/CONTRIBUTING.md).
+Issues and pull requests are welcome. The [shared contributing rules](https://github.com/cplieger/.github/blob/main/CONTRIBUTING.md) apply.
 
 ## Disclaimer
 
