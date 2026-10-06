@@ -430,10 +430,8 @@ func TestSanitizeCappedPair(t *testing.T) {
 	}
 }
 
-// legacySanitizeSingleLineBounded is a verbatim copy of the preset's
-// implementation from before it was rebuilt on the shared cap-and-mark
-// engine, kept as the parity oracle for the ~15 plain call sites across the
-// fleet whose output must not move by a byte.
+// legacySanitizeSingleLineBounded is the byte-parity oracle for the ~15 plain
+// call sites across the cplieger repos whose output must not move by a byte.
 func legacySanitizeSingleLineBounded(s string, n int) string {
 	s = runesafe.SanitizeSingleLine(s)
 	if s == "" || len(s) <= n {
