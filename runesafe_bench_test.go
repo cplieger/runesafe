@@ -302,15 +302,13 @@ func TestSanitizeSingleLineBoundedWithinCapIsAllocationFree(t *testing.T) {
 }
 
 // BenchmarkSanitize is the primary trend series: one sanitizer call over the input
-// classes a real emit boundary meets. clean_ascii carries the full size sweep so both
-// a fixed per-call overhead (worst at 256 bytes) and a super-linear scan (a jump
-// between 4 KiB and 64 KiB) are visible; unsafe_dense carries the upper two so the
-// rewrite path's slope reads against the fast path's. The other three are measured at
-// one size, since their value is the RATIO to clean_ascii there.
-//
-// SetBytes is set because these calls genuinely scan every byte. The fleet's reducer
-// drops MB/s from the published series deliberately — throughput is the one go-test
-// metric where smaller is worse — so it serves the local reader only.
+// classes a real emit boundary meets. clean_ascii carries the full size sweep so a
+// fixed per-call overhead (worst at 256 bytes) and a super-linear scan (a jump
+// between 4 KiB and 64 KiB) both show; unsafe_dense carries the upper two so the
+// rewrite path's slope reads against the fast path's. The other three are measured
+// at one size, for their RATIO to clean_ascii. SetBytes is set because these calls
+// scan every byte; the shared benchmark reducer drops MB/s from the published
+// series (smaller is worse there), so it serves the local reader only.
 func BenchmarkSanitize(b *testing.B) {
 	for _, class := range []struct {
 		name  string
