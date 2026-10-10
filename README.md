@@ -1,10 +1,10 @@
 # runesafe
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe/v2.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v2) [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod) [![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/mutation.json)](https://github.com/cplieger/runesafe/issues?q=label%3Agremlins-tracker)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe/v3.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v3) [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod) [![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/mutation.json)](https://github.com/cplieger/runesafe/issues?q=label%3Agremlins-tracker)
 
 runesafe keeps untrusted text from forging your Go log lines, starting terminal escapes or reordering what a reader sees in a JSON document or report.
 
-It replaces the `strings.Map` over control characters you would otherwise write at each log call, JSON writer and report renderer with one policy they all share. It uses only the standard library, needs Go 1.27.1 or later and is licensed under Apache-2.0.
+It replaces the `strings.Map` over control characters you would otherwise write at each log call, JSON writer and report renderer with one policy they all share. It uses only the standard library, needs Go 1.27.2 or later and is licensed under Apache-2.0.
 
 ## Why use it
 
@@ -14,15 +14,15 @@ runesafe is built for Go code that logs or re-emits text it did not write, such 
 - `encoding/json` and slog's `JSONHandler` write C1 and bidi controls unescaped, so JSON alone does not stop a terminal escape or a [Trojan Source](https://trojansource.codes) reordering.
 - `Sanitize` keeps CR and LF for JSON, and `SanitizeSingleLine` replaces them for a one-line sink.
 - Caps cut on a rune boundary, and the budgeted forms bound the sanitizer's work too.
-- An `Untrusted` field sanitizes itself whenever slog, `fmt` or `encoding/json` emits it.
-- `Sanitize`, `SanitizeSingleLine` and `Untrusted` in slog and `fmt` do not allocate for clean text.
+- An `Untrusted` value emits its sanitized form whenever slog, an encoder or a `fmt` verb writes it, as a field, a slice element or a map key. The exceptions are `%#v`, which prints an ASCII-escaped constructor call, and `%T`, `%p` and a `%w` on a non-error, which `fmt` prints without calling its methods. It stores no raw unsafe rune for such a reflection-based printer to find.
+- `Sanitize`, `SanitizeSingleLine` and `Untrusted` in slog and in `fmt`'s `%v` and `%s` do not allocate for clean text.
 
 Consider [`strconv.Quote`](https://pkg.go.dev/strconv#Quote) or `%q` if you want each control shown as an escape such as `\u202e`. Consider [bluemonday](https://github.com/microcosm-cc/bluemonday) for user content in HTML, which it sanitizes against an allowlist.
 
 ## Install
 
 ```sh
-go get github.com/cplieger/runesafe/v2@latest
+go get github.com/cplieger/runesafe/v3@latest
 ```
 
 ## Usage
@@ -46,7 +46,7 @@ slog.Warn("upstream rejected request",
     "reason", runesafe.SanitizeSingleLineBounded(upstreamErr.Error(), 200))
 ```
 
-You can also tag a field once, in the struct that decodes the upstream payload. slog, `fmt` and `encoding/json` then emit it sanitized, and `Raw` returns the decoded string unchanged:
+You can also tag a field once, in the struct that decodes the upstream payload. slog, `fmt`'s `%v` and `%s`, and `encoding/json` then emit it sanitized, and `Raw` returns the decoded string unchanged:
 
 ```go
 type Episode struct {
@@ -57,9 +57,9 @@ slog.Warn("better release available", "title", ep.Title) // sanitized automatica
 if ep.Title.Raw() == stored.Title { /* matching stays raw */ }
 ```
 
-If your program saves a struct and reads it back, store `Raw` in a plain `string` field, because `json.Marshal` writes a tagged field in its sanitized form.
+Tag text that does not come from a decoder with `runesafe.NewUntrusted(s)`. If your program saves a struct and reads it back, store `Raw` in a plain `string` field, because `json.Marshal` writes a tagged field in its sanitized form.
 
-The package has 13 runnable examples on pkg.go.dev, and `go test` keeps them true. [Bounding sanitized text](docs/capping.md) covers hard size limits and bounding the sanitizer's work.
+The package has 14 runnable examples on pkg.go.dev, and `go test` keeps them true. [Bounding sanitized text](docs/capping.md) covers hard size limits and bounding the sanitizer's work.
 
 ## API
 
@@ -68,9 +68,9 @@ The package has 13 runnable examples on pkg.go.dev, and `go test` keeps them tru
 - `SanitizeBudgeted` and `SanitizeSingleLineBudgeted` cut the raw value to the cap before sanitizing, so a huge value costs no more work than a short one. A `Budget`, created with `NewBudget` or `NewSingleLineBudget`, does the same for several values that share one cap.
 - `CapBytes` keeps the head and `CapBytesTail` keeps the tail, both cut on a rune boundary.
 - `IsUnsafeMultiLine`, `IsUnsafeSingleLine`, `IsUnsafeNonASCII` and `IsBidiControl` classify one rune, for a policy of your own.
-- `Untrusted` is a string type with `Raw` and `SingleLine`, plus the `LogValue`, `String` and `MarshalText` methods that slog, `fmt` and encoders call.
+- `Untrusted`, created with `NewUntrusted` or by decoding, has `Raw` and `SingleLine`, plus the `LogValue`, `String`, `Format`, `MarshalText` and `UnmarshalText` methods that slog, `fmt` and encoders call.
 
-The full reference is on [pkg.go.dev](https://pkg.go.dev/github.com/cplieger/runesafe/v2).
+The full reference is on [pkg.go.dev](https://pkg.go.dev/github.com/cplieger/runesafe/v3).
 
 ## Sanitize where text leaves your program
 
