@@ -1,3 +1,3 @@
-module github.com/cplieger/runesafe/v2
+module github.com/cplieger/runesafe/v3
 
-go 1.27.1
+go 1.27.2

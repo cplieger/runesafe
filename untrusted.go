@@ -3,126 +3,113 @@ package runesafe
 import (
 	"encoding"
 	"fmt"
+	"io"
 	"log/slog"
+	"strconv"
 )
 
-// Untrusted marks a string as untrusted upstream text at the moment it
-// enters the program — an API response field, an upstream error message, a
-// file name, a title — so every human-facing sink it later reaches applies
-// the package's rune policy automatically. The type makes provenance
-// portable: the trust decision is recorded once, in the DTO struct that
-// decodes the upstream payload, instead of re-derived at every emit site.
-//
-// Ingestion is free. A string-kinded named type without an UnmarshalText
-// method decodes natively (encoding/json assigns into it directly), so
-// tagging a decode-struct field preserves the raw bytes exactly as
-// received. Emission is where the policy fires, through the standard
-// interfaces:
-//
-//   - slog: LogValue implements slog.LogValuer, so a value passed as a
-//     bare attr ("title", v) resolves to its Sanitize'd form in every
-//     handler, through groups, before encoding.
-//   - fmt and errors: String implements fmt.Stringer, so %s, %v, %q — and
-//     fmt.Errorf("upstream said %s", v) — render sanitized text. An error
-//     built this way carries no escape introducers from construction on,
-//     the one boundary that covers error values (slog handlers stringify
-//     errors inside the encoder, after any attribute rewriting). String
-//     keeps CR/LF (the Sanitize preset), so the error text is safe where
-//     its eventual sink escapes or quotes them — slog's handlers, JSON —
-//     but not as-is for a hand-built sink that escapes nothing; there,
-//     build the message from SingleLine instead.
-//   - encoders: MarshalText implements encoding.TextMarshaler, so
-//     encoding/json and any TextMarshaler-aware encoder emit the
-//     Sanitize'd form, however deeply the value nests in a document —
-//     a map KEY included, which Go 1.27's v2-backed encoding/json routes
-//     through MarshalText.
-//
-// Raw returns the exact bytes for the paths that must not be transformed:
-// matching, dedupe keys, context-aware escapers, and byte caps on the raw
-// value itself (a cap bounding the EMITTED form applies after sanitizing:
-// CapBytes(v.String(), n), never Untrusted(CapBytes(v.Raw(), n)), because
-// sanitizing can grow invalid bytes into the 3-byte U+FFFD). A plain
-// string(v) conversion yields the same bytes but silently drops the tag;
-// prefer Raw so intentional unwrapping stays greppable.
-//
-// Two rules keep the type honest:
-//
-//   - Machine-read persistence stores Raw. MarshalText fires inside every
-//     json.Marshal, so a tagged field written to a state file and read
-//     back would round-trip sanitized-not-raw. Structs persisted for the
-//     program's own consumption keep plain string fields, populated via
-//     Raw at construction; the tagged form is for human-facing documents
-//     only.
-//   - Untrusted does not replace construction-time sanitization for text
-//     that must be safe unconditionally through every future sink (a
-//     captured error body embedded in a returned value), and context-aware
-//     sinks (Markdown cells, URLs, HTML) still need their own escaping on
-//     top of the rune policy, composed over Raw.
-//
-// LogValue, String, and MarshalText apply Sanitize (the keepCRLF=true
-// preset): correct for JSON sinks, and safe for slog's TextHandler, whose
-// quoting escapes a kept CR or LF. For a hand-built single-line sink whose
-// encoder escapes nothing, use SingleLine explicitly.
-type Untrusted string
+// Untrusted holds untrusted upstream text. It decodes raw and emits the
+// Sanitize form through slog, any encoding.TextMarshaler-aware encoder and
+// the fmt verbs it formats: all but %T, %p and a %w on a non-error, with %#v
+// printing an escaped constructor call. It is a struct because encoding/json
+// writes a string-kinded map key without calling MarshalText
+// (https://go.dev/issue/81355). It stores no raw unsafe rune, so a reflection
+// path (%p, an unexported field) prints none. The zero value is empty; values
+// compare and key maps by raw bytes.
+// docs/untrusted.md holds the full contract.
+type Untrusted struct {
+	// shown is the Sanitize form, which equals the raw bytes when quoted is
+	// empty. quoted is strconv.QuoteToASCII of the raw bytes whenever
+	// Sanitize changes them (an unsafe rune or invalid UTF-8), else empty.
+	// The pair is a function of the raw bytes and quoted is reversible, so
+	// == stays raw byte equality.
+	shown  string
+	quoted string
+}
 
-// Compile-time proof of the three sink interfaces the type doc promises.
 var (
-	_ slog.LogValuer         = Untrusted("")
-	_ fmt.Stringer           = Untrusted("")
-	_ encoding.TextMarshaler = Untrusted("")
+	_ slog.LogValuer           = Untrusted{}
+	_ fmt.Stringer             = Untrusted{}
+	_ fmt.Formatter            = Untrusted{}
+	_ encoding.TextMarshaler   = Untrusted{}
+	_ encoding.TextUnmarshaler = (*Untrusted)(nil)
 )
+
+// NewUntrusted tags s as untrusted, keeping its bytes exactly. It sanitizes
+// once, so clean text costs one scan and no allocation.
+func NewUntrusted(s string) Untrusted {
+	shown := Sanitize(s)
+	if shown == s {
+		return Untrusted{shown: s}
+	}
+	return Untrusted{shown: shown, quoted: strconv.QuoteToASCII(s)}
+}
 
 // LogValue implements slog.LogValuer: a tagged attr value resolves to its
-// Sanitize'd form in every handler before encoding.
+// Sanitize form in every handler before encoding.
 func (u Untrusted) LogValue() slog.Value {
-	return slog.StringValue(u.String())
+	return slog.StringValue(u.shown)
 }
 
-// String implements fmt.Stringer: %s, %v, %q, and fmt.Errorf render the
-// Sanitize'd form, so an error wrapping the value carries no escape
-// introducers from construction on. The form keeps CR/LF (see the type
-// comment): fine wherever the text is later quoted or encoded (slog, JSON),
-// not for a hand-built single-line sink — use SingleLine there.
+// String implements fmt.Stringer and returns the Sanitize form. It keeps CR
+// and LF, so a hand-built single-line sink that escapes nothing uses
+// SingleLine instead.
 func (u Untrusted) String() string {
-	return Sanitize(string(u))
+	return u.shown
 }
 
-// MarshalText implements encoding.TextMarshaler: encoding/json and any
-// TextMarshaler-aware encoder emit the Sanitize'd form at any nesting
-// depth, a map KEY included — Go 1.27's v2-backed encoding/json, which this
-// module's go directive requires, routes a string-kinded key through
-// MarshalText. Decoding is deliberately untouched (no UnmarshalText), so raw
-// bytes survive ingestion; see the type comment for the machine-read
-// persistence rule this asymmetry imposes.
+// Format implements fmt.Formatter, which fmt calls for every verb but %T, %p
+// and a %w on a non-error. Each verb formats the Sanitize form with the
+// directive's flags, width and precision, except %#v: it prints Go syntax that
+// rebuilds the raw value, with every non-ASCII rune escaped, and ignores width
+// and precision.
+func (u Untrusted) Format(f fmt.State, verb rune) {
+	_, hasWidth := f.Width()
+	_, hasPrec := f.Precision()
+	switch {
+	case verb == 'v' && f.Flag('#'):
+		fmt.Fprintf(f, "runesafe.NewUntrusted(%s)", strconv.QuoteToASCII(u.Raw()))
+	case (verb == 'v' || verb == 's') && !hasWidth && !hasPrec:
+		// The plain directive, written without building a format string so
+		// %v and %s stay allocation-free.
+		_, _ = io.WriteString(f, u.shown)
+	default:
+		fmt.Fprintf(f, fmt.FormatString(f, verb), u.shown)
+	}
+}
+
+// MarshalText implements encoding.TextMarshaler: encoders emit the Sanitize
+// form, as a value or a map key, at any nesting depth.
 func (u Untrusted) MarshalText() ([]byte, error) {
-	return []byte(u.String()), nil
+	return []byte(u.shown), nil
 }
 
-// SingleLine returns the SanitizeSingleLine'd form, for hand-built
-// single-line sinks whose encoder does not escape CR/LF.
+// UnmarshalText implements encoding.TextUnmarshaler by keeping text exactly,
+// so a decoded field or map key holds the raw bytes. Because MarshalText
+// sanitizes, a tagged field written out and read back returns sanitized:
+// state a program reads back stores Raw in a plain string field.
+func (u *Untrusted) UnmarshalText(text []byte) error {
+	*u = NewUntrusted(string(text))
+	return nil
+}
+
+// SingleLine returns the SanitizeSingleLine form, for hand-built single-line
+// sinks whose encoder does not escape CR/LF.
 func (u Untrusted) SingleLine() string {
-	return SanitizeSingleLine(string(u))
+	return SanitizeSingleLine(u.Raw())
 }
 
-// Raw returns the exact bytes as received, for matching, dedupe keys, byte
-// caps, and context-aware escapers. A byte cap meant to bound an EMITTED
-// form belongs on the sanitized string — CapBytes(u.String(), n) — because
-// sanitizing can grow the raw bytes (each invalid byte becomes the
-// three-byte U+FFFD), so a cap applied to Raw does not survive emission.
-// Prefer Raw over a string conversion so intentional unwrapping stays
-// greppable.
-//
-// Matching on Raw is BYTE equality, and that is the contract: two values
-// differing only in an unsafe rune stay distinct. Do not substitute
-// strings.EqualFold to turn such a comparison into an identity check on
-// untrusted text. A fold is not an identity — U+212A folds to ASCII K, so a
-// fold-equal test accepts a non-ASCII string as an ASCII one — and its answers
-// move with the toolchain: Go 1.27's Unicode 17 folds U+0390/U+1FD3,
-// U+03B0/U+1FE3 and U+FB05/U+FB06 together where Go 1.26 kept them distinct,
-// while strings.ToLower maps all six to themselves on both, so the two
-// comparisons do not even agree with each other. Case-insensitive matching that
-// must stay stable belongs on an ASCII-only fold, or on ToLower as an explicit
-// canonicalization whose result is the key.
+// Raw returns the exact bytes as received, for matching, dedupe keys and
+// context-aware escapers. Matching on Raw is byte equality, so two values
+// differing only in an unsafe rune stay distinct (docs/non-goals.md explains
+// why a case fold is not a substitute). Raw allocates only when Sanitize
+// changed the input. A cap on the emitted form goes on CapBytes(u.String(), n),
+// because sanitizing can grow the raw bytes.
 func (u Untrusted) Raw() string {
-	return string(u)
+	if u.quoted == "" {
+		return u.shown
+	}
+	// quoted is always QuoteToASCII output, which Unquote cannot reject.
+	raw, _ := strconv.Unquote(u.quoted)
+	return raw
 }

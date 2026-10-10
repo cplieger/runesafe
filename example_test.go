@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cplieger/runesafe/v2"
+	"github.com/cplieger/runesafe/v3"
 )
 
 // ExampleSanitize sanitizes an upstream-controlled title before it becomes
@@ -109,6 +109,20 @@ func ExampleUntrusted() {
 	// Frieren gpj.exe
 	// bad: Frieren gpj.exe
 	// {"title":"Frieren gpj.exe"}
+}
+
+// ExampleUntrusted_mapKey keys a JSON document by untrusted text: the map
+// looks keys up by their raw bytes, and the encoder emits each key sanitized.
+func ExampleUntrusted_mapKey() {
+	title := runesafe.NewUntrusted("Frieren\u202egpj.exe")
+	counts := map[runesafe.Untrusted]int{title: 3}
+
+	fmt.Println(counts[runesafe.NewUntrusted("Frieren\u202egpj.exe")]) // raw lookup
+	out, _ := json.Marshal(counts)
+	fmt.Println(string(out))
+	// Output:
+	// 3
+	// {"Frieren gpj.exe":3}
 }
 
 // ExampleSanitizeCapped bounds a multi-line upstream body for a JSON sink:

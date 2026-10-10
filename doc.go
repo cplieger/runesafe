@@ -21,9 +21,11 @@
 // CR/LF policies. [Sanitize] keeps CR and LF for JSON-encoded sinks, and
 // [SanitizeSingleLine] replaces them too, each unsafe rune becoming a space.
 // [CapBytes], [SanitizeSingleLineBounded], the Capped and Budgeted pairs and
-// [Budget] bound the result. The [Untrusted] string type applies Sanitize
-// automatically in every standard sink while [Untrusted.Raw] keeps the exact
-// bytes.
+// [Budget] bound the result. The [Untrusted] type applies Sanitize
+// automatically in slog, fmt and every encoding.TextMarshaler-aware encoder,
+// map keys included (fmt's %#v prints an ASCII-escaped constructor call
+// instead, and %T and %p bypass its methods), and [Untrusted.Raw] keeps the
+// exact bytes.
 //
 // Sanitize at the emit boundary, so comparisons and dedupe keys keep the raw
 // value. A caller that also removes a known secret redacts, sanitizes, redacts
