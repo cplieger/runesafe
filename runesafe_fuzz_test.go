@@ -2,12 +2,13 @@ package runesafe_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/cplieger/runesafe/v2"
+	"github.com/cplieger/runesafe/v3"
 )
 
 // fuzzSeeds is the adversarial corpus for the sanitizers: terminal escape
@@ -241,19 +242,18 @@ func FuzzCapBytesTail(f *testing.F) {
 	})
 }
 
-// FuzzUntrustedContract drives the provenance type with arbitrary strings
-// and asserts its full contract against the preset oracles: Raw round-trips
-// the exact input bytes, String/MarshalText/LogValue all equal Sanitize,
-// SingleLine equals SanitizeSingleLine, MarshalText never errors, a JSON
-// round-trip of a tagged field yields the Sanitize form (decode-raw,
-// encode-sanitized), and re-tagging an emitted form is a fixed point
-// (idempotence carries over from the presets).
+// FuzzUntrustedContract asserts the type's contract against the preset
+// oracles: Raw round-trips the exact input, String/MarshalText/LogValue equal
+// Sanitize, SingleLine equals SanitizeSingleLine, a tagged field or map key
+// encodes to the Sanitize form and decodes like a plain string, re-tagging an
+// emitted form is a fixed point equal to the original only when nothing was
+// replaced, and fmt's reflection paths print no unsafe rune.
 func FuzzUntrustedContract(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, in string) {
-		u := runesafe.Untrusted(in)
+		u := runesafe.NewUntrusted(in)
 		if u.Raw() != in {
 			t.Errorf("Raw() = %q, want exact input %q", u.Raw(), in)
 		}
@@ -291,8 +291,49 @@ func FuzzUntrustedContract(f *testing.F) {
 		if back.V != want {
 			t.Errorf("JSON round-trip = %q, want Sanitize form %q", back.V, want)
 		}
-		if again := runesafe.Untrusted(u.String()).String(); again != u.String() {
+		keyBlob, err := json.Marshal(map[runesafe.Untrusted]int{u: 1})
+		if err != nil {
+			t.Fatalf("Marshal map key: %v", err)
+		}
+		var keyBack map[string]int
+		if err := json.Unmarshal(keyBlob, &keyBack); err != nil {
+			t.Fatalf("Unmarshal map key: %v", err)
+		}
+		if _, ok := keyBack[want]; !ok || len(keyBack) != 1 {
+			t.Errorf("map-key round-trip = %v, want the single Sanitize form %q", keyBack, want)
+		}
+		var decoded runesafe.Untrusted
+		if err := decoded.UnmarshalText([]byte(in)); err != nil || decoded != u {
+			t.Errorf("UnmarshalText kept %q (err %v), want exact input %q", decoded.Raw(), err, in)
+		}
+		// A tagged field must decode to exactly what a plain string field
+		// decodes, invalid UTF-8 and escapes included.
+		quoted, err := json.Marshal(in)
+		if err != nil {
+			t.Fatalf("Marshal string: %v", err)
+		}
+		var plain string
+		var tagged runesafe.Untrusted
+		if err := json.Unmarshal(quoted, &plain); err != nil {
+			t.Fatalf("Unmarshal string: %v", err)
+		}
+		if err := json.Unmarshal(quoted, &tagged); err != nil || tagged.Raw() != plain {
+			t.Errorf("decoded Untrusted = %q (err %v), want the plain string decode %q", tagged.Raw(), err, plain)
+		}
+		retagged := runesafe.NewUntrusted(u.String())
+		if again := retagged.String(); again != u.String() {
 			t.Errorf("re-tagged String not a fixed point: %q -> %q", u.String(), again)
+		}
+		if (retagged == u) != (in == want) {
+			t.Errorf("NewUntrusted(%q) == NewUntrusted(its Sanitize form %q) is %v, want raw byte equality", in, want, retagged == u)
+		}
+		// fmt reaches the stored fields by reflection through an unexported
+		// field and under %p, so what it prints must hold no unsafe rune.
+		hidden := struct{ v runesafe.Untrusted }{u}
+		for _, out := range []string{fmt.Sprintf("%+v", hidden), fmt.Sprintf("%#v", hidden), fmt.Sprintf("%p", u), fmt.Sprintf("%d", u)} {
+			if !utf8.ValidString(out) || strings.IndexFunc(out, runesafe.IsUnsafeMultiLine) >= 0 {
+				t.Errorf("fmt printed an unsafe rune or invalid UTF-8: %q", out)
+			}
 		}
 	})
 }
