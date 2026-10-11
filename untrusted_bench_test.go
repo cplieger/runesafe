@@ -2,6 +2,7 @@ package runesafe_test
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"testing"
 
@@ -29,7 +30,10 @@ func (discardState) Width() (int, bool)                { return 0, false }
 func (discardState) Precision() (int, bool)            { return 0, false }
 func (discardState) Flag(int) bool                     { return false }
 
-var formatState fmt.State = discardState{}
+var (
+	formatState fmt.State       = discardState{}
+	_           io.StringWriter = discardState{}
+)
 
 // TestUntrustedSinksAreAllocationFreeForCleanText gates the cost claim under the type's
 // adoption advice: tagging a field is free for the values an honest upstream sends, at
