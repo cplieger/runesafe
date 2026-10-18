@@ -59,13 +59,14 @@ if ep.Title.Raw() == stored.Title { /* matching stays raw */ }
 
 Tag text that does not come from a decoder with `runesafe.NewUntrusted(s)`. If your program saves a struct and reads it back, store `Raw` in a plain `string` field, because `json.Marshal` writes a tagged field in its sanitized form.
 
-The package has 14 runnable examples on pkg.go.dev, and `go test` keeps them true. [Bounding sanitized text](docs/capping.md) covers hard size limits and bounding the sanitizer's work.
+The package has 15 runnable examples on pkg.go.dev, and `go test` keeps them true. [Bounding sanitized text](docs/capping.md) covers hard size limits and bounding the sanitizer's work.
 
 ## API
 
 - `Sanitize` and `SanitizeSingleLine` sanitize a whole string, keeping or replacing CR and LF.
 - `SanitizeSingleLineBounded`, `SanitizeCapped` and `SanitizeSingleLineCapped` sanitize the whole value first and then cut it to the cap. `SanitizeCapped` and `SanitizeSingleLineCapped` also return whether they cut, and the marker you pass counts toward the cap.
 - `SanitizeBudgeted` and `SanitizeSingleLineBudgeted` cut the raw value to the cap before sanitizing, so a huge value costs no more work than a short one. A `Budget`, created with `NewBudget` or `NewSingleLineBudget`, does the same for several values that share one cap.
+- `RedactSingleLineCapped` removes known secrets from the text and from its sanitized form for a single line, then caps like `SanitizeSingleLineCapped`.
 - `CapBytes` keeps the head and `CapBytesTail` keeps the tail, both cut on a rune boundary.
 - `IsUnsafeMultiLine`, `IsUnsafeSingleLine`, `IsUnsafeNonASCII` and `IsBidiControl` classify one rune, for a policy of your own.
 - `Untrusted`, created with `NewUntrusted` or by decoding, has `Raw` and `SingleLine`, plus the `LogValue`, `String`, `Format`, `MarshalText` and `UnmarshalText` methods that slog, `fmt` and encoders call.
@@ -80,11 +81,17 @@ Some text must be safe in every sink it may ever reach, such as an error body ca
 
 A Markdown table cell, a link URL or an HTML page has injection characters of its own, such as pipes, brackets and angle brackets. Apply that sink's own escaper on top of runesafe.
 
-If you also remove a known secret, such as an API key, from the same text, remove it before and after sanitizing, then cap last. [Bounding sanitized text](docs/capping.md#redacting-a-known-secret) explains why each step is needed.
+If you also remove a known secret, such as an API key, from the same text, use `RedactSingleLineCapped`. It replaces each secret with `[redacted]`, matching it in the text and in its sanitized form, then caps:
+
+```go
+reason, cut := runesafe.RedactSingleLineCapped(body, 200, "...", apiKey)
+```
+
+[Bounding sanitized text](docs/capping.md#redacting-a-known-secret) explains why each step is needed.
 
 ## Unsupported by design
 
-runesafe does no HTML or XSS sanitizing, Unicode normalization or case folding. It leaves zero-width and look-alike runes alone, always replaces with a space and never removes a rune. [Unsupported by design](docs/non-goals.md) gives the reason for each and what to use instead.
+runesafe does no HTML or XSS sanitizing, Unicode normalization or case folding. It leaves zero-width and look-alike runes alone, and its sanitizers always replace with a space and never remove a rune. [Unsupported by design](docs/non-goals.md) gives the reason for each and what to use instead.
 
 ## Documentation
 

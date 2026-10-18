@@ -28,8 +28,8 @@
 // exact bytes.
 //
 // Sanitize at the emit boundary, so comparisons and dedupe keys keep the raw
-// value. A caller that also removes a known secret redacts, sanitizes, redacts
-// again and caps last.
+// value. [RedactSingleLineCapped] also removes known secrets, matching each in
+// the text and in its sanitized form in one pass, and caps last.
 //
 // It is not an HTML sanitizer and does not normalize Unicode. docs/policy.md,
 // docs/capping.md, docs/untrusted.md and docs/non-goals.md hold the full
