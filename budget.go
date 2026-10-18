@@ -146,10 +146,19 @@ func (b *Budget) Result() (text string, cut bool) {
 	if !b.cut {
 		return text, false
 	}
-	if b.total < len(b.marker) {
-		return CapBytes(text, b.total), true
+	head, mark := markedCut(text, b.total, b.marker)
+	return head + mark, true
+}
+
+// markedCut is the cut half of the marker-inside-the-cap rule: the rune-safe
+// head of text and marker within n bytes, or, when n cannot hold the marker
+// intact, a head of at most n bytes and no marker. Comparing before
+// subtracting keeps a very negative n from wrapping into a huge room.
+func markedCut(text string, n int, marker string) (head, mark string) {
+	if n < len(marker) {
+		return CapBytes(text, n), ""
 	}
-	return CapBytes(text, b.total-len(b.marker)) + b.marker, true
+	return CapBytes(text, n-len(marker)), marker
 }
 
 // SanitizeBudgeted is the one-value form of NewBudget: a Budget of n bytes, one
