@@ -90,10 +90,24 @@ slog.Warn("better release available", "groups", attr, "groups_truncated", cut)
 
 ## Redacting a known secret
 
-If you also remove a known secret, such as an API key, from the same text, redact before sanitizing, redact again after it, and cap last.
+`RedactSingleLineCapped` removes known secrets, such as API keys, from text bound for a single-line sink, and caps the result like `SanitizeSingleLineCapped`:
 
-- Redact before, because the sanitizer rewrites an unsafe rune inside a value. A key with one control rune inside it would reach the sink as a near-complete fragment that your full-value match no longer finds.
-- Redact after, because the sanitizer produces spaces and U+FFFD, the only runes it can write. A secret that contains either can be assembled from text that did not match before.
+```go
+reason, cut := runesafe.RedactSingleLineCapped(body, maxReasonBytes, "...", apiKey, token)
+slog.Warn("upstream refused", "reason", reason, "reason_truncated", cut)
+```
+
+It finds every match of a secret in the text and in its sanitized form, writes the sanitized text with `[redacted]` in place of every rune a match touches, and caps last. Each part is needed:
+
+- Match the text as given, because the sanitizer rewrites an unsafe rune inside a value. A key with one control rune inside it would reach the sink as a near-complete fragment that a full-value match no longer finds.
+- Match the sanitized form, because the sanitizer produces spaces and U+FFFD, the only runes it can write. A secret that contains either can be assembled from text that did not match before.
+- Find both kinds of match before replacing anything, because they can overlap. Replacing one kind first would break a match of the other kind and leave part of that secret behind.
 - Cap last, so a secret that crosses the cut is already gone rather than sliced into a surviving prefix.
 
-`SanitizeSingleLineBounded`, the Capped and Budgeted pairs and `Budget` all contain a cap, and `Budget.Write` caps before it sanitizes. A redaction after one of them may miss a secret the cap split. Redact before such a function and again on its output, or build the order yourself from `Sanitize` and `CapBytes`.
+Pass every secret the text may carry in one call. Empty and repeated secrets are ignored, and overlapping or adjacent matches become one `[redacted]`, so a short secret inside a longer one cannot leave the rest of the longer one behind. After a cut, a tail that matches the start of a secret is dropped too.
+
+No match of a secret in the text, or in its sanitized form, survives. A match replaces the whole runes it touches and nothing else, so a secret that is not valid UTF-8 cannot leave part of a rune behind. The `[redacted]` mark itself is fixed text: a secret that shares text with `[redacted]`, such as one holding a bracket, can still be spelled by a mark and the text around it, and the marker you pass is written as is.
+
+Pass the whole value. If you cut it yourself first, a secret split by your cut can survive as its first bytes whenever the shortened value then fits the cap. Register each wire form a secret takes in the text, such as its JSON-escaped or percent-encoded form, as a secret of its own, because matching is byte for byte.
+
+`SanitizeSingleLineBounded`, the Capped and Budgeted pairs and `Budget` all contain a cap, and `Budget.Write` caps before it sanitizes. A redaction after one of them may miss a secret the cap split. A redaction built from separate passes around a sanitizer can also leave part of a secret behind, because a match in the text and one that only exists after sanitizing can overlap. `RedactSingleLineCapped` finds both in one pass. It has no multi-line form.

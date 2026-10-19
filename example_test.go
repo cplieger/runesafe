@@ -48,6 +48,15 @@ func ExampleCapBytesTail() {
 	// "...レン"
 }
 
+// ExampleRedactSingleLineCapped bounds an upstream error body that echoed the
+// request's API key and tried to forge a second log record.
+func ExampleRedactSingleLineCapped() {
+	body := "invalid key sk-123456\nlevel=ERROR forged"
+	text, cut := runesafe.RedactSingleLineCapped(body, 32, "...", "sk-123456")
+	fmt.Printf("%q %v\n", text, cut)
+	// Output: "invalid key [redacted] level=..." true
+}
+
 // ExampleIsUnsafeMultiLine shows the CR/LF policy split: a newline is safe
 // for a sink whose encoder escapes it, and unsafe for a single-line sink.
 func ExampleIsUnsafeMultiLine() {
