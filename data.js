@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
   "lastUpdate": 1793744824028,
-  "repoUrl": "https://github.com/cplieger/ci",
+  "repoUrl": "https://github.com/cplieger/runesafe",
   "entries": {
     "Benchmark": [
       {
@@ -4175,19 +4175,19 @@ window.BENCHMARK_DATA = {
       {
         "commit": {
           "author": {
-            "name": "Christopher Plieger",
-            "username": "cplieger",
-            "email": "917744+cplieger@users.noreply.github.com"
+            "name": "tribble-trouble[bot]",
+            "username": "tribble-trouble[bot]",
+            "email": "338123824+tribble-trouble[bot]@users.noreply.github.com"
           },
           "committer": {
             "name": "GitHub",
             "username": "web-flow",
             "email": "noreply@github.com"
           },
-          "id": "9ead40e51a68dd7202d29b68a7ab6cbcb6e5d0cb",
-          "message": "chore(audit): expect AGPL-3.0 for grelot (#915)",
-          "timestamp": "2026-11-03T19:17:26Z",
-          "url": "https://github.com/cplieger/ci/commit/9ead40e51a68dd7202d29b68a7ab6cbcb6e5d0cb"
+          "id": "6a2653a0ec776f0f54d8fa25c0f7573030c43aab",
+          "message": "chore(sync): synced file(s) with cplieger/ci (#363)\n\nCo-authored-by: tribble-trouble[bot] <338123824+tribble-trouble[bot]@users.noreply.github.com>",
+          "timestamp": "2026-11-03T12:36:01Z",
+          "url": "https://github.com/cplieger/runesafe/commit/6a2653a0ec776f0f54d8fa25c0f7573030c43aab"
         },
         "date": 1793744822939,
         "tool": "customSmallerIsBetter",
