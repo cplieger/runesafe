@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793140136963,
-  "repoUrl": "https://github.com/cplieger/runesafe",
+  "lastUpdate": 1793744824028,
+  "repoUrl": "https://github.com/cplieger/ci",
   "entries": {
     "Benchmark": [
       {
@@ -4167,6 +4167,385 @@ window.BENCHMARK_DATA = {
             "name": "BenchmarkWorkBound/capped/bytes_4096",
             "value": 20125,
             "range": "± 234.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Christopher Plieger",
+            "username": "cplieger",
+            "email": "917744+cplieger@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "9ead40e51a68dd7202d29b68a7ab6cbcb6e5d0cb",
+          "message": "chore(audit): expect AGPL-3.0 for grelot (#915)",
+          "timestamp": "2026-11-03T19:17:26Z",
+          "url": "https://github.com/cplieger/ci/commit/9ead40e51a68dd7202d29b68a7ab6cbcb6e5d0cb"
+        },
+        "date": 1793744822939,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "BenchmarkAggregate/join_then_capped - B/op",
+            "value": 532896,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkAggregate/join_then_capped - allocs/op",
+            "value": 3,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkAggregate/join_then_capped",
+            "value": 2406215.5,
+            "range": "± 9368",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkAggregate/streaming - B/op",
+            "value": 624,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkAggregate/streaming - allocs/op",
+            "value": 3,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkAggregate/streaming",
+            "value": 1482,
+            "range": "± 42",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkCapBytes - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkCapBytes - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkCapBytes",
+            "value": 4.6905,
+            "range": "± 0.0295",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkNewUntrusted - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkNewUntrusted - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkNewUntrusted",
+            "value": 12828,
+            "range": "± 635",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_256 - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_256 - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_256",
+            "value": 810.5,
+            "range": "± 3.25",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_4096 - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_4096 - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_4096",
+            "value": 12841,
+            "range": "± 157",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_65536 - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_65536 - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_ascii/bytes_65536",
+            "value": 204817,
+            "range": "± 1003",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_utf8/bytes_4096 - B/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_utf8/bytes_4096 - allocs/op",
+            "value": 0,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/clean_utf8/bytes_4096",
+            "value": 9764,
+            "range": "± 17",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/invalid_utf8/bytes_4096 - B/op",
+            "value": 11392,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/invalid_utf8/bytes_4096 - allocs/op",
+            "value": 2,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/invalid_utf8/bytes_4096",
+            "value": 26509.5,
+            "range": "± 856.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_4096 - B/op",
+            "value": 4864,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_4096 - allocs/op",
+            "value": 1,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_4096",
+            "value": 13832.5,
+            "range": "± 297",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_65536 - B/op",
+            "value": 73728,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_65536 - allocs/op",
+            "value": 1,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_dense/bytes_65536",
+            "value": 218943,
+            "range": "± 509.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_tail/bytes_4096 - B/op",
+            "value": 4864,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_tail/bytes_4096 - allocs/op",
+            "value": 1,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitize/unsafe_tail/bytes_4096",
+            "value": 13697.5,
+            "range": "± 414",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitizeSingleLineBounded - B/op",
+            "value": 208,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitizeSingleLineBounded - allocs/op",
+            "value": 1,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSanitizeSingleLineBounded",
+            "value": 12910,
+            "range": "± 14",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_1048576 - B/op",
+            "value": 368,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_1048576 - allocs/op",
+            "value": 4,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_1048576",
+            "value": 735,
+            "range": "± 32.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_4096 - B/op",
+            "value": 368,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_4096 - allocs/op",
+            "value": 4,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/budgeted/bytes_4096",
+            "value": 721.1,
+            "range": "± 3.45",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_1048576 - B/op",
+            "value": 4046980,
+            "range": "± 1.5",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_1048576 - allocs/op",
+            "value": 5,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_1048576",
+            "value": 7692128,
+            "range": "± 458467.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_4096 - B/op",
+            "value": 11520,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_4096 - allocs/op",
+            "value": 4,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkWorkBound/capped/bytes_4096",
+            "value": 26466,
+            "range": "± 298",
             "unit": "ns/op",
             "extra": "10 samples, median"
           }
