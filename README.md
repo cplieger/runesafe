@@ -1,5 +1,8 @@
 # runesafe
 
+> Moved to [`github.com/cplieger/go/textsafe`](https://github.com/cplieger/go/tree/dev/textsafe) and renamed `textsafe`.
+> **Archived 2026-11-06. This repository is read-only. The published Go module stays available.**
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/runesafe/v3.svg)](https://pkg.go.dev/github.com/cplieger/runesafe/v3) [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/runesafe)](https://github.com/cplieger/runesafe/blob/main/go.mod) [![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/runesafe/badges/mutation.json)](https://github.com/cplieger/runesafe/issues?q=label%3Agremlins-tracker)
 
 runesafe keeps untrusted text from forging your Go log lines, starting terminal escapes or reordering what a reader sees in a JSON document or report.
